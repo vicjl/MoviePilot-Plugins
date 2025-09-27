@@ -474,10 +474,10 @@ class FengchaoSignin(_PluginBase):
 
     @staticmethod
     def get_command() -> List[Dict[str, Any]]:
-        pass
+        return []
 
     def get_api(self) -> List[Dict[str, Any]]:
-        pass
+        return []
 
     def get_service(self) -> List[Dict[str, Any]]:
         """
