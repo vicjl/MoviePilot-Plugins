@@ -164,7 +164,7 @@ class FengchaoSignin(_PluginBase):
         if not self._scheduler.running:
             self._scheduler.start()
 
-def _send_signin_failure_notification(self, reason: str, attempt: int):
+    def _send_signin_failure_notification(self, reason: str, attempt: int):
         """
         发送签到失败的通知
         :param reason: 失败原因
@@ -183,7 +183,7 @@ def _send_signin_failure_notification(self, reason: str, attempt: int):
                     f"• 剩余定时重试次数: {remaining_retries}\n"
                     f"━━━━━━━━━━\n"
                 )
-            
+
             self._send_notification(
                 title="【❌ 蜂巢签到失败】",
                 text=(
