@@ -23,7 +23,7 @@ class FengchaoSignin(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/madrays/MoviePilot-Plugins/main/icons/fengchao.png"
     # 插件版本
-    plugin_version = "1.0.9"
+    plugin_version = "1.0.8"
     # 插件作者
     plugin_author = "madrays"
     # 作者主页
