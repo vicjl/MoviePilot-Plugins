@@ -2356,7 +2356,7 @@ def _send_signin_failure_notification(self, reason: str, attempt: int):
             logger.error(f"详细错误: {traceback.format_exc()}")
             return None
             
-def _login_postman_method(self, proxies=None):
+    def _login_postman_method(self, proxies=None):
         """
         使用Postman方式登录（先获取CSRF和cookie，再登录）
         """
@@ -2513,7 +2513,7 @@ def _login_postman_method(self, proxies=None):
             logger.error(f"详细错误: {traceback.format_exc()}")
             return None
             
-def _verify_cookie(self, req, cookie_str, proxy_info):
+    def _verify_cookie(self, req, cookie_str, proxy_info):
         """验证cookie是否有效（内置重试机制）"""
         if not cookie_str:
             return None
