@@ -164,6 +164,43 @@ class FengchaoSignin(_PluginBase):
         if not self._scheduler.running:
             self._scheduler.start()
 
+    def _send_signin_failure_notification(self, reason: str, attempt: int):
+        """
+        发送签到失败的通知
+        :param reason: 失败原因
+        :param attempt: 当前尝试次数
+        """
+        if self._notify:
+            # 检查是否还有后续的定时重试
+            remaining_retries = self._retry_count - self._current_retry
+            retry_info = ""
+            if self._retry_count > 0 and remaining_retries > 0:
+                next_retry_hours = self._retry_interval * (self._current_retry + 1)
+                retry_info = (
+                    f"🔄 重试信息\n"
+                    f"• 将在 {next_retry_hours} 小时后进行下一次定时重试\n"
+                    f"• 剩余定时重试次数: {remaining_retries}\n"
+                    f"━━━━━━━━━━\n"
+                )
+            
+            self._send_notification(
+                title="【❌ 蜂巢签到失败】",
+                text=(
+                    f"📢 执行结果\n"
+                    f"━━━━━━━━━━\n"
+                    f"🕐 时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                    f"❌ 状态：签到失败 (已完成 {attempt + 1} 次快速重试)\n"
+                    f"💬 原因：{reason}\n"
+                    f"━━━━━━━━━━\n"
+                    f"{retry_info}"
+                    f"💡 解决方法\n"
+                    f"• 检查插件配置中的用户名和密码是否正确\n"
+                    f"• 检查网络连接和代理设置\n"
+                    f"• 尝试手动登录蜂巢论坛\n"
+                    f"━━━━━━━━━━"
+                )
+            )
+
     def _get_proxies(self):
         """
         获取代理设置
@@ -194,6 +231,7 @@ class FengchaoSignin(_PluginBase):
             return
             
         self._signing_in = True
+        attempt = 0
         try:
             # 检查用户名密码是否配置
             if not self._username or not self._password:
@@ -220,202 +258,185 @@ class FengchaoSignin(_PluginBase):
                     logger.info(f"正在进行第 {attempt}/{max_retries} 次重试...")
                     time.sleep(3)  # 重试前等待3秒
                     
-                try:
-                    # 获取代理设置
-                    proxies = self._get_proxies()
-                    
-                    # 每次都重新登录获取cookie
-                    logger.info(f"开始登录蜂巢论坛获取cookie...")
-                    cookie = self._login_and_get_cookie(proxies)
-                    if not cookie:
-                        logger.error(f"登录失败，无法获取cookie")
-                        if attempt < max_retries:
-                            continue
-                        self._send_signin_failure_notification("登录失败，无法获取cookie", attempt)
-                        return False
-                    
-                    logger.info(f"登录成功，成功获取cookie")
-                    
-                    # 使用获取的cookie访问蜂巢
-                    try:
-                        res = RequestUtils(cookies=cookie, proxies=proxies, timeout=30).get_res(url="https://pting.club")
-                    except Exception as e:
-                        logger.error(f"请求蜂巢出错: {str(e)}")
-                        if attempt < max_retries:
-                            continue
-                        self._send_signin_failure_notification("连接站点出错", attempt)
-                        return False
-                    
-                    if not res or res.status_code != 200:
-                        logger.error(f"请求蜂巢返回错误状态码: {res.status_code if res else '无响应'}")
-                        if attempt < max_retries:
-                            continue
-                        # 所有重试失败，发送通知
-                        self._send_signin_failure_notification("无法连接到站点", attempt)
-                        return False
-                    
-                    # 获取csrfToken
-                    pattern = r'"csrfToken":"(.*?)"'
-                    csrfToken = re.findall(pattern, res.text)
-                    if not csrfToken:
-                        logger.error("请求csrfToken失败")
-                        if attempt < max_retries:
-                            continue
-                        
-                        # 所有重试失败，发送通知
-                        self._send_signin_failure_notification("无法获取CSRF令牌", attempt)
-                        return False
-                    
-                    csrfToken = csrfToken[0]
-                    logger.info(f"获取csrfToken成功 {csrfToken}")
-                    
-                    # 获取userid
-                    pattern = r'"userId":(\d+)'
-                    match = re.search(pattern, res.text)
-                    
-                    if match and match.group(1) != "0":
-                        userId = match.group(1)
-                        logger.info(f"获取userid成功 {userId}")
-                        
-                        # 如果开启了蜂巢论坛PT人生数据更新，尝试更新数据
-                        if self._mp_push_enabled:
-                            self.__push_mp_stats(user_id=userId, csrf_token=csrfToken, cookie=cookie)
-                    else:
-                        logger.error("未找到userId")
-                        if attempt < max_retries:
-                            continue
-                            
-                        # 所有重试失败，发送通知
-                        self._send_signin_failure_notification("无法获取用户ID", attempt)
-                        return False
-                    
-                    # 准备签到请求
-                    headers = {
-                        "X-Csrf-Token": csrfToken,
-                        "X-Http-Method-Override": "PATCH",
-                        "Cookie": cookie
-                    }
-                    
-                    data = {
-                        "data": {
-                            "type": "users",
-                            "attributes": {
-                                "canCheckin": False,
-                                "totalContinuousCheckIn": 2
-                            },
-                            "id": userId
-                        }
-                    }
-                    
-                    # 开始签到
-                    try:
-                        res = RequestUtils(headers=headers, proxies=proxies, timeout=30).post_res(
-                            url=f"https://pting.club/api/users/{userId}", 
-                            json=data
-                        )
-                    except Exception as e:
-                        logger.error(f"签到请求出错: {str(e)}")
-                        if attempt < max_retries:
-                            continue
-                        # 所有重试失败，发送通知
-                        self._send_signin_failure_notification("签到请求异常", attempt)
-                        return False
-                    
-                    if not res or res.status_code != 200:
-                        logger.error(f"蜂巢签到失败，状态码: {res.status_code if res else '无响应'}")
-                        if attempt < max_retries:
-                            continue
-                            
-                        # 所有重试失败，发送通知
-                        self._send_signin_failure_notification("API请求错误", attempt)
-                        return False
-                    
-                    # 签到成功
-                    sign_dict = json.loads(res.text)
-                    
-                    # 保存用户信息数据（用于个人信息卡）
-                    self.save_data("user_info", sign_dict)
-                    
-                    money = sign_dict['data']['attributes']['money']
-                    totalContinuousCheckIn = sign_dict['data']['attributes']['totalContinuousCheckIn']
-                    # 获取签到奖励花粉数量
-                    lastCheckinMoney = sign_dict['data']['attributes'].get('lastCheckinMoney', 0)
-                    
-                    # 检查是否已签到
-                    if "canCheckin" in sign_dict['data']['attributes'] and not sign_dict['data']['attributes']['canCheckin']:
-                        status_text = "已签到"
-                        reward_text = "今日已领取奖励"
-                        logger.info(f"蜂巢已签到，当前花粉: {money}，累计签到: {totalContinuousCheckIn}")
-                    else:
-                        status_text = "签到成功"
-                        reward_text = f"获得{lastCheckinMoney}花粉奖励"
-                        logger.info(f"蜂巢签到成功，获得{lastCheckinMoney}花粉，当前花粉: {money}，累计签到: {totalContinuousCheckIn}")
-                    
-                    # 发送通知
-                    if self._notify:
-                        self._send_notification(
-                            title=f"【✅ 蜂巢{status_text}】",
-                            text=(
-                                f"📢 执行结果\n"
-                                f"━━━━━━━━━━\n"
-                                f"🕐 时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-                                f"✨ 状态：{status_text}\n"
-                                f"🎁 奖励：{reward_text}\n"
-                                f"━━━━━━━━━━\n"
-                                f"📊 积分统计\n"
-                                f"🌸 花粉：{money}\n"
-                                f"📆 签到天数：{totalContinuousCheckIn}\n"
-                                f"━━━━━━━━━━"
-                            )
-                        )
-                    
-                    # 读取历史记录
-                    history = {
-                        "date": datetime.today().strftime('%Y-%m-%d %H:%M:%S'),
-                        "status": status_text,
-                        "money": money,
-                        "totalContinuousCheckIn": totalContinuousCheckIn,
-                        "lastCheckinMoney": lastCheckinMoney,
-                        "retry": {
-                            "enabled": self._retry_count > 0,
-                            "current": self._current_retry,
-                            "max": self._retry_count,
-                            "interval": self._retry_interval
-                        }
-                    }
-                    
-                    # 保存签到历史
-                    self._save_history(history)
-                    
-                    # 如果是重试后成功，重置重试计数
-                    if self._current_retry > 0:
-                        logger.info(f"蜂巢签到重试成功，重置重试计数")
-                        self._current_retry = 0
-                    
-                    # 签到成功，退出循环
-                    return True
-                    
-                except Exception as e:
-                    logger.error(f"签到过程发生异常: {str(e)}")
-                    import traceback
-                    logger.error(f"错误详情: {traceback.format_exc()}")
-                    
+                # 获取代理设置
+                proxies = self._get_proxies()
+                
+                # 每次都重新登录获取cookie
+                logger.info(f"开始登录蜂巢论坛获取cookie...")
+                cookie = self._login_and_get_cookie(proxies)
+                if not cookie:
+                    logger.error(f"登录失败，无法获取cookie")
                     if attempt < max_retries:
                         continue
+                    raise Exception("登录失败，无法获取cookie")
+                
+                logger.info(f"登录成功，成功获取cookie")
+                
+                # 使用获取的cookie访问蜂巢
+                try:
+                    res = RequestUtils(cookies=cookie, proxies=proxies, timeout=30).get_res(url="https://pting.club")
+                except Exception as e:
+                    logger.error(f"请求蜂巢出错: {str(e)}")
+                    if attempt < max_retries:
+                        continue
+                    raise Exception("连接站点出错")
+                
+                if not res or res.status_code != 200:
+                    logger.error(f"请求蜂巢返回错误状态码: {res.status_code if res else '无响应'}")
+                    if attempt < max_retries:
+                        continue
+                    raise Exception("无法连接到站点")
+                
+                # 获取csrfToken
+                pattern = r'"csrfToken":"(.*?)"'
+                csrfToken = re.findall(pattern, res.text)
+                if not csrfToken:
+                    logger.error("请求csrfToken失败")
+                    if attempt < max_retries:
+                        continue
+                    raise Exception("无法获取CSRF令牌")
+                
+                csrfToken = csrfToken[0]
+                logger.info(f"获取csrfToken成功 {csrfToken}")
+                
+                # 获取userid
+                pattern = r'"userId":(\d+)'
+                match = re.search(pattern, res.text)
+                
+                if match and match.group(1) != "0":
+                    userId = match.group(1)
+                    logger.info(f"获取userid成功 {userId}")
                     
-                    # 所有重试失败，发送通知并退出
-                    self._send_signin_failure_notification("未知错误", attempt)
+                    # 如果开启了蜂巢论坛PT人生数据更新，尝试更新数据
+                    if self._mp_push_enabled:
+                        self.__push_mp_stats(user_id=userId, csrf_token=csrfToken, cookie=cookie)
+                else:
+                    logger.error("未找到userId")
+                    if attempt < max_retries:
+                        continue
+                    raise Exception("无法获取用户ID")
+                
+                # 准备签到请求
+                headers = {
+                    "X-Csrf-Token": csrfToken,
+                    "X-Http-Method-Override": "PATCH",
+                    "Cookie": cookie
+                }
+                
+                data = {
+                    "data": {
+                        "type": "users",
+                        "attributes": {
+                            "canCheckin": False,
+                            "totalContinuousCheckIn": 2
+                        },
+                        "id": userId
+                    }
+                }
+                
+                # 开始签到
+                try:
+                    res = RequestUtils(headers=headers, proxies=proxies, timeout=30).post_res(
+                        url=f"https://pting.club/api/users/{userId}", 
+                        json=data
+                    )
+                except Exception as e:
+                    logger.error(f"签到请求出错: {str(e)}")
+                    if attempt < max_retries:
+                        continue
+                    raise Exception("签到请求异常")
+                
+                if not res or res.status_code != 200:
+                    logger.error(f"蜂巢签到失败，状态码: {res.status_code if res else '无响应'}")
+                    if attempt < max_retries:
+                        continue
+                    raise Exception("API请求错误")
+                
+                # 签到成功
+                sign_dict = json.loads(res.text)
+                
+                # 保存用户信息数据（用于个人信息卡）
+                self.save_data("user_info", sign_dict)
+                
+                money = sign_dict['data']['attributes']['money']
+                totalContinuousCheckIn = sign_dict['data']['attributes']['totalContinuousCheckIn']
+                # 获取签到奖励花粉数量
+                lastCheckinMoney = sign_dict['data']['attributes'].get('lastCheckinMoney', 0)
+                
+                # 检查是否已签到
+                if "canCheckin" in sign_dict['data']['attributes'] and not sign_dict['data']['attributes']['canCheckin']:
+                    status_text = "已签到"
+                    reward_text = "今日已领取奖励"
+                    logger.info(f"蜂巢已签到，当前花粉: {money}，累计签到: {totalContinuousCheckIn}")
+                else:
+                    status_text = "签到成功"
+                    reward_text = f"获得{lastCheckinMoney}花粉奖励"
+                    logger.info(f"蜂巢签到成功，获得{lastCheckinMoney}花粉，当前花粉: {money}，累计签到: {totalContinuousCheckIn}")
+                
+                # 发送通知
+                if self._notify:
+                    self._send_notification(
+                        title=f"【✅ 蜂巢{status_text}】",
+                        text=(
+                            f"📢 执行结果\n"
+                            f"━━━━━━━━━━\n"
+                            f"🕐 时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                            f"✨ 状态：{status_text}\n"
+                            f"🎁 奖励：{reward_text}\n"
+                            f"━━━━━━━━━━\n"
+                            f"📊 积分统计\n"
+                            f"🌸 花粉：{money}\n"
+                            f"📆 签到天数：{totalContinuousCheckIn}\n"
+                            f"━━━━━━━━━━"
+                        )
+                    )
+                
+                # 读取历史记录
+                history = {
+                    "date": datetime.today().strftime('%Y-%m-%d %H:%M:%S'),
+                    "status": status_text,
+                    "money": money,
+                    "totalContinuousCheckIn": totalContinuousCheckIn,
+                    "lastCheckinMoney": lastCheckinMoney,
+                    "retry": {
+                        "enabled": self._retry_count > 0,
+                        "current": self._current_retry,
+                        "max": self._retry_count,
+                        "interval": self._retry_interval
+                    }
+                }
+                
+                # 保存签到历史
+                self._save_history(history)
+                
+                # 如果是重试后成功，重置重试计数
+                if self._current_retry > 0:
+                    logger.info(f"蜂巢签到重试成功，重置重试计数")
+                    self._current_retry = 0
+                
+                # 签到成功，退出循环
+                return True
                     
-                    # 设置下次定时重试
-                    if self._retry_count > 0 and self._current_retry < self._retry_count:
-                        self._current_retry += 1
-                        retry_hours = self._retry_interval * self._current_retry
-                        logger.info(f"安排第{self._current_retry}次定时重试，将在{retry_hours}小时后重试")
-                        self._schedule_retry(hours=retry_hours)
-                    else:
-                        self._current_retry = 0
-                    
-                    return False
+        except Exception as e:
+            logger.error(f"签到过程发生异常: {str(e)}")
+            import traceback
+            logger.error(f"错误详情: {traceback.format_exc()}")
+            
+            # 所有重试失败，发送通知并退出
+            self._send_signin_failure_notification(str(e), attempt)
+            
+            # 设置下次定时重试
+            if self._retry_count > 0 and self._current_retry < self._retry_count:
+                self._current_retry += 1
+                retry_hours = self._retry_interval
+                logger.info(f"安排第{self._current_retry}次定时重试，将在{retry_hours}小时后重试")
+                self._schedule_retry(hours=retry_hours)
+            else:
+                if self._retry_count > 0:
+                    logger.info("已达到最大定时重试次数，不再重试")
+                self._current_retry = 0
+            
+            return False
         finally:
             # 释放锁
             self._signing_in = False
