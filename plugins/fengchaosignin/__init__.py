@@ -175,15 +175,14 @@ class FengchaoSignin(_PluginBase):
             remaining_retries = self._retry_count - self._current_retry
             retry_info = ""
             if self._retry_count > 0 and remaining_retries > 0:
-                # 修复：显示固定的重试间隔，而不是累加
-                next_retry_hours = self._retry_interval
+                next_retry_hours = self._retry_interval * (self._current_retry + 1)
                 retry_info = (
                     f"🔄 重试信息\n"
                     f"• 将在 {next_retry_hours} 小时后进行下一次定时重试\n"
                     f"• 剩余定时重试次数: {remaining_retries}\n"
                     f"━━━━━━━━━━\n"
                 )
-
+            
             self._send_notification(
                 title="【❌ 蜂巢签到失败】",
                 text=(
@@ -194,6 +193,11 @@ class FengchaoSignin(_PluginBase):
                     f"💬 原因：{reason}\n"
                     f"━━━━━━━━━━\n"
                     f"{retry_info}"
+                    f"💡 解决方法\n"
+                    f"• 检查插件配置中的用户名和密码是否正确\n"
+                    f"• 检查网络连接和代理设置\n"
+                    f"• 尝试手动登录蜂巢论坛\n"
+                    f"━━━━━━━━━━"
                 )
             )
 
@@ -474,10 +478,10 @@ class FengchaoSignin(_PluginBase):
 
     @staticmethod
     def get_command() -> List[Dict[str, Any]]:
-        return []
+        pass
 
     def get_api(self) -> List[Dict[str, Any]]:
-        return []
+        pass
 
     def get_service(self) -> List[Dict[str, Any]]:
         """
@@ -2504,7 +2508,7 @@ class FengchaoSignin(_PluginBase):
             cookie_str = "; ".join(cookie_parts)
             logger.info(f"最终cookie字符串: {cookie_str[:50]}... (使用{proxy_info})")
             
-            # 调用现在更强大的验证方法
+            # 验证cookie
             return self._verify_cookie(req, cookie_str, proxy_info)
                 
         except Exception as e:
@@ -2514,52 +2518,28 @@ class FengchaoSignin(_PluginBase):
             return None
             
     def _verify_cookie(self, req, cookie_str, proxy_info):
-        """验证cookie是否有效（内置重试机制）"""
-        if not cookie_str:
-            return None
+        """验证cookie是否有效"""
+        try:
+            if not cookie_str:
+                return None
                 
-        logger.info(f"验证cookie有效性 (使用{proxy_info})...")
-        
-        headers = {
-            "Cookie": cookie_str,
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
-            "Accept": "*/*",
-            "Cache-Control": "no-cache"
-        }
-
-        max_verify_retries = 3
-        for attempt in range(max_verify_retries):
+            logger.info(f"验证cookie有效性 (使用{proxy_info})...")
+            
+            headers = {
+                "Cookie": cookie_str,
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
+                "Accept": "*/*",
+                "Cache-Control": "no-cache"
+            }
+            
             try:
-                if attempt > 0:
-                    logger.info(f"验证Cookie重试 {attempt}/{max_verify_retries - 1}...")
-                    time.sleep(2)  # 在重试前等待2秒
-
                 verify_res = req.get_res("https://pting.club", headers=headers)
-                
                 if not verify_res or verify_res.status_code != 200:
-                    logger.warning(f"第{attempt + 1}次验证cookie失败，状态码: {verify_res.status_code if verify_res else '无响应'} (使用{proxy_info})")
-                    continue  # 继续下一次尝试
-                    
-                # 验证是否已登录（检查页面是否包含用户ID）
-                pattern = r'"userId":(\d+)'
-                user_matches = re.search(pattern, verify_res.text)
-                if not user_matches:
-                    logger.warning(f"第{attempt + 1}次验证cookie失败，未找到userId (使用{proxy_info})")
-                    continue
-                    
-                user_id = user_matches.group(1)
-                if user_id == "0":
-                    logger.warning(f"第{attempt + 1}次验证cookie失败，userId为0，表示未登录状态 (使用{proxy_info})")
-                    continue
-                    
-                logger.info(f"登录成功！获取到有效cookie，用户ID: {user_id} (使用{proxy_info})")
-                return cookie_str
-
+                    logger.error(f"验证cookie失败，状态码: {verify_res.status_code if verify_res else '无响应'} (使用{proxy_info})")
+                    return None
             except Exception as e:
-                logger.warning(f"第{attempt + 1}次验证cookie请求异常 (使用{proxy_info}): {str(e)}")
-        
-        logger.error(f"所有 {max_verify_retries} 次cookie验证尝试均失败。")
-        return None
+                logger.error(f"验证cookie请求异常 (使用{proxy_info}): {str(e)}")
+                return None
                 
             # 验证是否已登录（检查页面是否包含用户ID）
             pattern = r'"userId":(\d+)'
