@@ -1433,13 +1433,13 @@ class FengchaoSignin(_PluginBase):
                                     {
                                         'component': 'div',
                                         'props': {'class': 'd-flex flex-wrap'},
-                                        # FINAL FIX: Replaced VChip with a custom div for vertical layout and larger images.
+                                        # FINAL FIX v2: Refined styling for vertical alignment, bigger image, and better text.
                                         'content': [
                                             {
                                                 'component': 'div',
                                                 'props': {
-                                                    'class': 'ma-1 text-center',
-                                                    'style': f"padding: 8px; border-radius: 8px; width: 80px; background-color: {badge.get('background_color') or 'rgba(128,128,128,0.15)'};",
+                                                    'class': 'ma-1 pa-2 d-flex flex-column align-center elevation-1',
+                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; width: 90px;',
                                                     'title': badge.get('description', '无描述')
                                                 },
                                                 'content': [
@@ -1447,21 +1447,20 @@ class FengchaoSignin(_PluginBase):
                                                         'component': 'VImg' if badge.get('image') else 'VIcon',
                                                         'props': ({
                                                             'src': badge.get('image'),
-                                                            'height': '48',
-                                                            'width': '48',
-                                                            'class': 'mb-1'
+                                                            'height': '60',
+                                                            'width': '60',
+                                                            'class': 'mb-2'
                                                         } if badge.get('image') else {
                                                             'icon': badge.get('icon'),
-                                                            'size': '48',
-                                                            'style': f"color: {badge.get('icon_color') or 'white'}",
-                                                            'class': 'mb-1'
+                                                            'size': '60',
+                                                            'class': 'mb-2'
                                                         })
                                                     },
                                                     {
                                                         'component': 'div',
                                                         'props': {
-                                                            'class': 'text-caption',
-                                                            'style': f"color: {badge.get('label_color') or 'inherit'}; white-space: normal; line-height: 1.2;"
+                                                            'class': 'text-body-2',
+                                                            'style': 'white-space: normal; line-height: 1.2; font-weight: 500;'
                                                         },
                                                         'text': badge.get('name', '未知徽章')
                                                     }
