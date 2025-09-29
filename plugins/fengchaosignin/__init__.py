@@ -1433,30 +1433,38 @@ class FengchaoSignin(_PluginBase):
                                     {
                                         'component': 'div',
                                         'props': {'class': 'd-flex flex-wrap'},
-                                        # FIX: 重构徽章VChip的渲染方式
+                                        # FINAL FIX: Replaced VChip with a custom div for vertical layout and larger images.
                                         'content': [
                                             {
-                                                'component': 'VChip',
+                                                'component': 'div',
                                                 'props': {
-                                                    'class': 'ma-1',
-                                                    'style': f"background-color: {badge.get('background_color') or '#424242'}; color: {badge.get('label_color') or 'white'};",
-                                                    'variant': 'flat',
-                                                    'size': 'default',
+                                                    'class': 'ma-1 text-center',
+                                                    'style': f"padding: 8px; border-radius: 8px; width: 80px; background-color: {badge.get('background_color') or 'rgba(128,128,128,0.15)'};",
                                                     'title': badge.get('description', '无描述')
                                                 },
                                                 'content': [
-                                                    ({
-                                                        'component': 'VAvatar',
-                                                        'props': {'start': True, 'size': 20, 'class': 'mr-1'},
-                                                        'content': [{
-                                                            'component': 'VImg',
-                                                            'props': {'src': badge.get('image')}
-                                                        }]
-                                                    } if badge.get('image') else {
-                                                        'component': 'VIcon',
-                                                        'props': {'start': True, 'icon': badge.get('icon'), 'style': f"color: {badge.get('icon_color') or 'white'}"}
-                                                    }),
-                                                    badge.get('name', '未知徽章')
+                                                    {
+                                                        'component': 'VImg' if badge.get('image') else 'VIcon',
+                                                        'props': ({
+                                                            'src': badge.get('image'),
+                                                            'height': '48',
+                                                            'width': '48',
+                                                            'class': 'mb-1'
+                                                        } if badge.get('image') else {
+                                                            'icon': badge.get('icon'),
+                                                            'size': '48',
+                                                            'style': f"color: {badge.get('icon_color') or 'white'}",
+                                                            'class': 'mb-1'
+                                                        })
+                                                    },
+                                                    {
+                                                        'component': 'div',
+                                                        'props': {
+                                                            'class': 'text-caption',
+                                                            'style': f"color: {badge.get('label_color') or 'inherit'}; white-space: normal; line-height: 1.2;"
+                                                        },
+                                                        'text': badge.get('name', '未知徽章')
+                                                    }
                                                 ]
                                             } for badge in badges
                                         ]
