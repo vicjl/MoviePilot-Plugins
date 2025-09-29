@@ -78,7 +78,7 @@
   },
   "FengchaoSignin": {
     "name": "蜂巢论坛签到",
-    "description": "自动完成蜂巢论坛每日签到，支持历史记录",
+    "description": "药丸(invites.fun)论坛签到。",
     "labels": "签到,蜂巢,论坛",
     "version": "1.0.9",
     "icon": "https://raw.githubusercontent.com/madrays/MoviePilot-Plugins/main/icons/fengchao.png",
