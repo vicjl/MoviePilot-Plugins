@@ -1433,7 +1433,6 @@ class FengchaoSignin(_PluginBase):
                                     {
                                         'component': 'div',
                                         'props': {'class': 'd-flex flex-wrap'},
-                                        # FINAL FIX v2: Refined styling for vertical alignment, bigger image, and better text.
                                         'content': [
                                             {
                                                 'component': 'div',
@@ -1447,12 +1446,12 @@ class FengchaoSignin(_PluginBase):
                                                         'component': 'VImg' if badge.get('image') else 'VIcon',
                                                         'props': ({
                                                             'src': badge.get('image'),
-                                                            'height': '60',
-                                                            'width': '60',
+                                                            'height': '50',
+                                                            'width': '50',
                                                             'class': 'mb-2'
                                                         } if badge.get('image') else {
                                                             'icon': badge.get('icon'),
-                                                            'size': '60',
+                                                            'size': '50',
                                                             'class': 'mb-2'
                                                         })
                                                     },
