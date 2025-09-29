@@ -351,24 +351,9 @@ class FengchaoSignin(_PluginBase):
                 # 签到成功
                 sign_dict = json.loads(res.text)
 
-                # 为了获取完整的徽章信息，重新请求一次用户数据
-                try:
-                    logger.info("签到成功，正在主动获取完整的用户信息以展示徽章...")
-                    # 注意在URL中加入了 `include` 来请求关联数据
-                    user_info_url = f"https://pting.club/api/users/{userId}?include=groups"
-                    user_info_res = RequestUtils(cookies=cookie, proxies=proxies, timeout=30).get_res(url=user_info_url)
-                    if user_info_res and user_info_res.status_code == 200:
-                        # 如果成功，用这份更完整的数据覆盖原来的
-                        full_user_info = user_info_res.json()
-                        self.save_data("user_info", full_user_info)
-                        logger.info("成功获取到完整的用户信息。")
-                    else:
-                        # 如果失败，仍然保存旧数据，只是没有徽章
-                        logger.warning("获取完整用户信息失败，徽章可能无法显示。")
-                        self.save_data("user_info", sign_dict)
-                except Exception as e:
-                    logger.error(f"获取完整用户信息时发生错误: {e}")
-                    self.save_data("user_info", sign_dict)
+                # 直接保存签到后的用户信息，不再进行二次请求
+                self.save_data("user_info", sign_dict)
+                logger.info("成功获取并保存用户信息。")
 
                 money = sign_dict['data']['attributes']['money']
                 totalContinuousCheckIn = sign_dict['data']['attributes']['totalContinuousCheckIn']
@@ -924,7 +909,7 @@ class FengchaoSignin(_PluginBase):
                             'icon': item.get('attributes', {}).get('icon', '')
                         })
 
-            # 重写整个徽章获取逻辑
+            # FIX: 重写徽章获取逻辑以正确解析数据
             badges = []
             user_badges_data = user_attrs.get('badges', [])
             for badge_item in user_badges_data:
@@ -940,7 +925,7 @@ class FengchaoSignin(_PluginBase):
                     'name': core_badge_info.get('name', '未知徽章'),
                     'icon': core_badge_info.get('icon', 'fas fa-award'),
                     'description': core_badge_info.get('description', '无描述'),
-                    'image': core_badge_info.get('image'), # 徽章图片
+                    'image': core_badge_info.get('image'),
                     'background_color': core_badge_info.get('backgroundColor'),
                     'icon_color': core_badge_info.get('iconColor'),
                     'label_color': core_badge_info.get('labelColor'),
