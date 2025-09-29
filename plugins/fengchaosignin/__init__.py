@@ -909,7 +909,7 @@ class FengchaoSignin(_PluginBase):
                             'icon': item.get('attributes', {}).get('icon', '')
                         })
 
-            # FIX: 重写徽章获取逻辑以正确解析数据
+            # 徽章获取逻辑
             badges = []
             user_badges_data = user_attrs.get('badges', [])
             for badge_item in user_badges_data:
@@ -1433,20 +1433,31 @@ class FengchaoSignin(_PluginBase):
                                     {
                                         'component': 'div',
                                         'props': {'class': 'd-flex flex-wrap'},
+                                        # FIX: 重构徽章VChip的渲染方式
                                         'content': [
                                             {
                                                 'component': 'VChip',
                                                 'props': {
                                                     'class': 'ma-1',
-                                                     # 使用徽章自己的颜色，并增加图片作为 prepend-avatar
                                                     'style': f"background-color: {badge.get('background_color') or '#424242'}; color: {badge.get('label_color') or 'white'};",
-                                                    'prepend_avatar': badge.get('image') if badge.get('image') else None,
-                                                    'prepend_icon': badge.get('icon') if not badge.get('image') else None,
                                                     'variant': 'flat',
                                                     'size': 'default',
                                                     'title': badge.get('description', '无描述')
                                                 },
-                                                'text': badge.get('name', '未知徽章')
+                                                'content': [
+                                                    ({
+                                                        'component': 'VAvatar',
+                                                        'props': {'start': True, 'size': 20, 'class': 'mr-1'},
+                                                        'content': [{
+                                                            'component': 'VImg',
+                                                            'props': {'src': badge.get('image')}
+                                                        }]
+                                                    } if badge.get('image') else {
+                                                        'component': 'VIcon',
+                                                        'props': {'start': True, 'icon': badge.get('icon'), 'style': f"color: {badge.get('icon_color') or 'white'}"}
+                                                    }),
+                                                    badge.get('name', '未知徽章')
+                                                ]
                                             } for badge in badges
                                         ]
                                     }
