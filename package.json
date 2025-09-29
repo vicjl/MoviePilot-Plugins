@@ -89,7 +89,7 @@
       "v1.0.9": "解除最多50个站点的限制"
     }
   },
-  "invitessign": {
+  "InvitesFunSignin": {
     "name": "药丸论坛签到-自制",
     "description": "自动完成蜂巢论坛每日签到，支持历史记录",
     "labels": "签到,蜂巢,论坛",
