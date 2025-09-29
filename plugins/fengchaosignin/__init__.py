@@ -350,10 +350,26 @@ class FengchaoSignin(_PluginBase):
                 
                 # 签到成功
                 sign_dict = json.loads(res.text)
-                
-                # 保存用户信息数据（用于个人信息卡）
-                self.save_data("user_info", sign_dict)
-                
+
+                # 为了获取完整的徽章信息，重新请求一次用户数据
+                try:
+                    logger.info("签到成功，正在主动获取完整的用户信息以展示徽章...")
+                    # 注意在URL中加入了 `include` 来请求关联数据
+                    user_info_url = f"https://pting.club/api/users/{userId}?include=groups"
+                    user_info_res = RequestUtils(cookies=cookie, proxies=proxies, timeout=30).get_res(url=user_info_url)
+                    if user_info_res and user_info_res.status_code == 200:
+                        # 如果成功，用这份更完整的数据覆盖原来的
+                        full_user_info = user_info_res.json()
+                        self.save_data("user_info", full_user_info)
+                        logger.info("成功获取到完整的用户信息。")
+                    else:
+                        # 如果失败，仍然保存旧数据，只是没有徽章
+                        logger.warning("获取完整用户信息失败，徽章可能无法显示。")
+                        self.save_data("user_info", sign_dict)
+                except Exception as e:
+                    logger.error(f"获取完整用户信息时发生错误: {e}")
+                    self.save_data("user_info", sign_dict)
+
                 money = sign_dict['data']['attributes']['money']
                 totalContinuousCheckIn = sign_dict['data']['attributes']['totalContinuousCheckIn']
                 # 获取签到奖励花粉数量
@@ -862,12 +878,12 @@ class FengchaoSignin(_PluginBase):
         history = self.get_data('history') or []
         # 获取用户信息
         user_info = self.get_data('user_info')
-        
+
         # 如果有用户信息，构建用户信息卡
         user_info_card = None
         if user_info and 'data' in user_info and 'attributes' in user_info['data']:
             user_attrs = user_info['data']['attributes']
-            
+
             # 获取用户基本信息
             username = user_attrs.get('displayName', '未知用户')
             avatar_url = user_attrs.get('avatarUrl', '')
@@ -881,19 +897,22 @@ class FengchaoSignin(_PluginBase):
             join_time = user_attrs.get('joinTime', '')
             last_seen_at = user_attrs.get('lastSeenAt', '')
             
+            # 获取背景图，优先使用主页背景，其次使用封面图
+            background_image = user_attrs.get('decorationProfileBackground') or user_attrs.get('cover')
+
             # 处理时间格式
             if join_time:
                 try:
                     join_time = datetime.fromisoformat(join_time.replace('Z', '+00:00')).strftime('%Y-%m-%d')
                 except:
                     join_time = '未知'
-            
+
             if last_seen_at:
                 try:
                     last_seen_at = datetime.fromisoformat(last_seen_at.replace('Z', '+00:00')).strftime('%Y-%m-%d %H:%M')
                 except:
                     last_seen_at = '未知'
-            
+
             # 获取用户组
             groups = []
             if 'included' in user_info:
@@ -904,82 +923,38 @@ class FengchaoSignin(_PluginBase):
                             'color': item.get('attributes', {}).get('color', '#888'),
                             'icon': item.get('attributes', {}).get('icon', '')
                         })
-            
-            # 获取用户徽章
+
+            # 重写整个徽章获取逻辑
             badges = []
-            badge_map = {}
-            badge_category_map = {}
-            
-            # 预处理徽章数据
-            if 'included' in user_info:
-                for item in user_info.get('included', []):
-                    if item.get('type') == 'badges':
-                        badge_map[item.get('id')] = {
-                            'name': item.get('attributes', {}).get('name', ''),
-                            'icon': item.get('attributes', {}).get('icon', ''),
-                            'description': item.get('attributes', {}).get('description', ''),
-                            'background_color': item.get('attributes', {}).get('backgroundColor', '#444'),
-                            'icon_color': item.get('attributes', {}).get('iconColor', '#fff'),
-                            'label_color': item.get('attributes', {}).get('labelColor', '#fff'),
-                            'category_id': item.get('relationships', {}).get('category', {}).get('data', {}).get('id')
-                        }
-                    elif item.get('type') == 'badgeCategories':
-                        badge_category_map[item.get('id')] = {
-                            'name': item.get('attributes', {}).get('name', ''),
-                            'order': item.get('attributes', {}).get('order', 0)
-                        }
-            
-            # 处理用户的徽章
-            if 'included' in user_info:
-                # 先获取所有徽章信息
-                badges_data = {}
-                for item in user_info.get('included', []):
-                    if item.get('type') == 'badges':
-                        badges_data[item.get('id')] = {
-                            'name': item.get('attributes', {}).get('name', '未知徽章'),
-                            'icon': item.get('attributes', {}).get('icon', 'fas fa-award'),
-                            'description': item.get('attributes', {}).get('description', ''),
-                            'background_color': item.get('attributes', {}).get('backgroundColor') or '#444',
-                            'icon_color': item.get('attributes', {}).get('iconColor') or '#FFFFFF',
-                            'label_color': item.get('attributes', {}).get('labelColor') or '#FFFFFF',
-                            'category_id': item.get('relationships', {}).get('category', {}).get('data', {}).get('id')
-                        }
+            user_badges_data = user_attrs.get('badges', [])
+            for badge_item in user_badges_data:
+                # 徽章的核心信息在嵌套的 'badge' 对象里
+                core_badge_info = badge_item.get('badge', {})
+                if not core_badge_info:
+                    continue
                 
-                # 获取徽章分类信息
-                categories = {}
-                for item in user_info.get('included', []):
-                    if item.get('type') == 'badgeCategories':
-                        categories[item.get('id')] = {
-                            'name': item.get('attributes', {}).get('name', '其他'),
-                            'order': item.get('attributes', {}).get('order', 0)
-                        }
+                # 徽章的分类信息在更深一层
+                category_info = core_badge_info.get('category', {})
                 
-                # 处理用户徽章
-                for item in user_info.get('included', []):
-                    if item.get('type') == 'userBadges':
-                        badge_id = item.get('relationships', {}).get('badge', {}).get('data', {}).get('id')
-                        if badge_id in badges_data:
-                            badge_info = badges_data[badge_id]
-                            category_id = badge_info.get('category_id')
-                            category_name = categories.get(category_id, {}).get('name', '其他')
-                            
-                            badges.append({
-                                'name': badge_info.get('name', ''),
-                                'icon': badge_info.get('icon', 'fas fa-award'),
-                                'description': badge_info.get('description', ''),
-                                'background_color': badge_info.get('background_color', '#444'),
-                                'icon_color': badge_info.get('icon_color', '#FFFFFF'),
-                                'label_color': badge_info.get('label_color', '#FFFFFF'),
-                                'category': category_name
-                            })
-            
+                badges.append({
+                    'name': core_badge_info.get('name', '未知徽章'),
+                    'icon': core_badge_info.get('icon', 'fas fa-award'),
+                    'description': core_badge_info.get('description', '无描述'),
+                    'image': core_badge_info.get('image'), # 徽章图片
+                    'background_color': core_badge_info.get('backgroundColor'),
+                    'icon_color': core_badge_info.get('iconColor'),
+                    'label_color': core_badge_info.get('labelColor'),
+                    'category': category_info.get('name', '其他')
+                })
+
             # 用户信息卡
             user_info_card = {
                 'component': 'VCard',
                 'props': {
-                    'variant': 'outlined', 
+                    'variant': 'outlined',
                     'class': 'mb-4',
-                    'style': f"background-image: url('{user_attrs.get('decorationProfileBackground', '')}'); background-size: cover; background-position: center;" if user_attrs.get('decorationProfileBackground') else ''
+                    # 使用新的背景图变量
+                    'style': f"background-image: url('{background_image}'); background-size: cover; background-position: center;" if background_image else ''
                 },
                 'content': [
                     {
@@ -998,19 +973,19 @@ class FengchaoSignin(_PluginBase):
                         'component': 'VCardText',
                         'content': [
                             # 用户基本信息部分
-                                    {
-                                        'component': 'VRow',
+                            {
+                                'component': 'VRow',
                                 'props': {'class': 'ma-1'},
-                                        'content': [
+                                'content': [
                                     # 左侧头像和用户名
-                                            {
-                                                'component': 'VCol',
-                                                'props': {
+                                    {
+                                        'component': 'VCol',
+                                        'props': {
                                             'cols': 12,
                                             'md': 5
-                                                },
-                                                'content': [
-                                                    {
+                                        },
+                                        'content': [
+                                            {
                                                 'component': 'div',
                                                 'props': {'class': 'd-flex align-center'},
                                                 'content': [
@@ -1068,7 +1043,8 @@ class FengchaoSignin(_PluginBase):
                                                                     {
                                                                         'component': 'VChip',
                                                                         'props': {
-                                                                            'style': f"background-color: #6B7CA8; color: white; padding: 0 8px; min-width: 60px; border-radius: 2px; height: 32px;",
+                                                                            # 使用用户组自己的颜色
+                                                                            'style': f"background-color: {group.get('color', '#6B7CA8')}; color: white; padding: 0 8px; min-width: 60px; border-radius: 2px; height: 32px;",
                                                                             'size': 'small',
                                                                             'class': 'mr-1 mb-1',
                                                                             'variant': 'elevated'
@@ -1096,28 +1072,28 @@ class FengchaoSignin(_PluginBase):
                                                 ]
                                             },
                                             # 注册和最后访问时间
-                                    {
-                                        'component': 'VRow',
-                                                'props': {'class': 'mt-2'},
-                                        'content': [
                                             {
-                                                'component': 'VCol',
+                                                'component': 'VRow',
+                                                'props': {'class': 'mt-2'},
+                                                'content': [
+                                                    {
+                                                        'component': 'VCol',
                                                         'props': {'cols': 12},
                                                         'content': [
                                                             {
                                                                 'component': 'div',
-                                                'props': {
+                                                                'props': {
                                                                     'class': 'pa-1 elevation-1 mb-1 ml-0',
                                                                     'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; width: fit-content;'
-                                                },
-                                                'content': [
-                                                    {
-                                                        'component': 'div',
+                                                                },
+                                                                'content': [
+                                                                    {
+                                                                        'component': 'div',
                                                                         'props': {'class': 'd-flex align-center text-caption'},
                                                                         'content': [
                                                                             {
                                                                                 'component': 'VIcon',
-                                                        'props': {
+                                                                                'props': {
                                                                                     'style': 'color: #4CAF50;',
                                                                                     'size': 'x-small',
                                                                                     'class': 'mr-1'
@@ -1155,13 +1131,13 @@ class FengchaoSignin(_PluginBase):
                                                                             {
                                                                                 'component': 'span',
                                                                                 'text': f'最后访问 {last_seen_at}'
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                ]
-            }
+                                                                            }
+                                                                        ]
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ]
+                                                    }
                                                 ]
                                             }
                                         ]
@@ -1477,10 +1453,13 @@ class FengchaoSignin(_PluginBase):
                                                 'component': 'VChip',
                                                 'props': {
                                                     'class': 'ma-1',
-                                                    'style': f"background-color: {['#1976D2', '#4CAF50', '#2196F3', '#FF9800', '#F44336', '#9C27B0', '#E91E63', '#FF5722', '#009688', '#3F51B5'][hash(badge.get('name', '')) % 10]}; color: white; display: inline-flex; align-items: center; justify-content: center; padding: 4px 10px; margin: 2px; border-radius: 6px; font-size: 0.9rem; min-width: 110px; height: 32px;",
+                                                     # 使用徽章自己的颜色，并增加图片作为 prepend-avatar
+                                                    'style': f"background-color: {badge.get('background_color') or '#424242'}; color: {badge.get('label_color') or 'white'};",
+                                                    'prepend_avatar': badge.get('image') if badge.get('image') else None,
+                                                    'prepend_icon': badge.get('icon') if not badge.get('image') else None,
                                                     'variant': 'flat',
-                                                    'size': 'large',
-                                                    'title': badge.get('description', '') or '无描述'
+                                                    'size': 'default',
+                                                    'title': badge.get('description', '无描述')
                                                 },
                                                 'text': badge.get('name', '未知徽章')
                                             } for badge in badges
