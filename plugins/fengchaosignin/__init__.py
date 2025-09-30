@@ -24,7 +24,7 @@ class FengchaoSignin(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/madrays/MoviePilot-Plugins/main/icons/fengchao.png"
     # 插件版本
-    plugin_version = "1.2.4"
+    plugin_version = "1.2.5"
     # 插件作者
     plugin_author = "madrays"
     # 作者主页
@@ -42,6 +42,7 @@ class FengchaoSignin(_PluginBase):
     _cron = None
     _cookie = None
     _onlyonce = False
+    _update_info_now = False
     _notify = False
     _history_days = None
     # 重试相关
@@ -71,6 +72,7 @@ class FengchaoSignin(_PluginBase):
             self._notify = config.get("notify", False)
             self._cron = config.get("cron", "30 8 * * *")
             self._onlyonce = config.get("onlyonce", False)
+            self._update_info_now = config.get("update_info_now", False)
             self._cookie = config.get("cookie", "")
             self._history_days = config.get("history_days", 30)
             self._retry_count = int(config.get("retry_count", 0))
@@ -82,51 +84,65 @@ class FengchaoSignin(_PluginBase):
             self._password = config.get("password", "")
             # 初始化最后推送时间
             self._last_push_time = self.get_data('last_push_time')
-        
+
         # 重置重试计数
         self._current_retry = 0
-        
+
         # 停止现有任务
         self.stop_service()
-        
+
         # 确保scheduler是新的
         self._scheduler = BackgroundScheduler(timezone=settings.TZ)
         
+        # 立即更新个人信息
+        if self._update_info_now:
+            logger.info("蜂巢插件：立即更新个人信息")
+            self._scheduler.add_job(func=self.__update_user_info, trigger='date',
+                                    run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=3),
+                                    name="蜂巢个人信息更新")
+            # 自动关闭开关
+            self._update_info_now = False
+            self.update_config(self.get_config_dict())
+
         # 立即运行一次
         if self._onlyonce:
             logger.info(f"蜂巢签到服务启动，立即运行一次")
             self._scheduler.add_job(func=self.__signin, trigger='date',
-                                run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=3),
-                                name="蜂巢签到")
+                                    run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=3),
+                                    name="蜂巢签到")
             # 关闭一次性开关
             self._onlyonce = False
-            self.update_config({
-                "onlyonce": False,
-                "cron": self._cron,
-                "enabled": self._enabled,
-                "notify": self._notify,
-                "history_days": self._history_days,
-                "retry_count": self._retry_count,
-                "retry_interval": self._retry_interval,
-                "mp_push_enabled": self._mp_push_enabled,
-                "mp_push_interval": self._mp_push_interval,
-                "use_proxy": self._use_proxy,
-                "username": self._username,
-                "password": self._password
-            })
+            self.update_config(self.get_config_dict())
+            
         # 周期运行
-        elif self._cron:
+        elif self._cron and self._enabled:
             logger.info(f"蜂巢签到服务启动，周期：{self._cron}")
             self._scheduler.add_job(func=self.__signin,
-                                   trigger=CronTrigger.from_crontab(self._cron),
-                                   name="蜂巢签到")
-            
-            # 移除定时更新PT人生数据的任务，只在签到时更新
+                                    trigger=CronTrigger.from_crontab(self._cron),
+                                    name="蜂巢签到")
 
         # 启动任务
         if self._scheduler.get_jobs():
             self._scheduler.print_jobs()
             self._scheduler.start()
+
+    def get_config_dict(self):
+        """获取当前配置字典，用于更新"""
+        return {
+            "enabled": self._enabled,
+            "notify": self._notify,
+            "cron": self._cron,
+            "onlyonce": self._onlyonce,
+            "update_info_now": self._update_info_now,
+            "history_days": self._history_days,
+            "retry_count": self._retry_count,
+            "retry_interval": self._retry_interval,
+            "mp_push_enabled": self._mp_push_enabled,
+            "mp_push_interval": self._mp_push_interval,
+            "use_proxy": self._use_proxy,
+            "username": self._username,
+            "password": self._password
+        }
 
     def _send_notification(self, title, text):
         """
@@ -150,17 +166,17 @@ class FengchaoSignin(_PluginBase):
         # 计算下次重试时间
         retry_interval = hours if hours is not None else self._retry_interval
         next_run_time = datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(hours=retry_interval)
-        
+
         # 安排重试任务
         self._scheduler.add_job(
-            func=self.__signin, 
+            func=self.__signin,
             trigger='date',
             run_date=next_run_time,
             name=f"蜂巢签到重试 ({self._current_retry}/{self._retry_count})"
         )
-        
+
         logger.info(f"蜂巢签到失败，将在{retry_interval}小时后重试，当前重试次数: {self._current_retry}/{self._retry_count}")
-        
+
         # 启动定时器（如果未启动）
         if not self._scheduler.running:
             self._scheduler.start()
@@ -184,7 +200,7 @@ class FengchaoSignin(_PluginBase):
                     f"• 剩余定时重试次数: {remaining_retries}\n"
                     f"━━━━━━━━━━\n"
                 )
-            
+
             self._send_notification(
                 title="【❌ 蜂巢签到失败】",
                 text=(
@@ -205,7 +221,7 @@ class FengchaoSignin(_PluginBase):
         if not self._use_proxy:
             logger.info("未启用代理")
             return None
-            
+
         try:
             # 获取系统代理设置
             if hasattr(settings, 'PROXY') and settings.PROXY:
@@ -217,6 +233,61 @@ class FengchaoSignin(_PluginBase):
         except Exception as e:
             logger.error(f"获取代理设置出错: {str(e)}")
             return None
+    
+    def __update_user_info(self):
+        """
+        仅更新用户信息，不执行签到
+        """
+        logger.info("开始执行蜂巢用户信息更新任务...")
+        try:
+            if not self._username or not self._password:
+                raise Exception("未配置用户名和密码")
+
+            proxies = self._get_proxies()
+            cookie = self._login_and_get_cookie(proxies)
+            if not cookie:
+                raise Exception("登录失败，无法获取Cookie")
+
+            # 访问主页以获取userId
+            res_main = RequestUtils(cookies=cookie, proxies=proxies, timeout=30).get_res(url="https://pting.club")
+            if not res_main or res_main.status_code != 200:
+                raise Exception(f"访问主页失败，状态码: {res_main.status_code if res_main else 'N/A'}")
+
+            match = re.search(r'"userId":(\d+)', res_main.text)
+            if not match or match.group(1) == "0":
+                raise Exception("无法从主页获取有效的用户ID")
+            
+            userId = match.group(1)
+            
+            # 直接调用Flarum API获取完整的用户信息
+            api_url = f"https://pting.club/api/users/{userId}?include=groups,badges,badges.badge.category"
+            res_api = RequestUtils(cookies=cookie, proxies=proxies, timeout=30).get_res(url=api_url)
+
+            if not res_api or res_api.status_code != 200:
+                raise Exception(f"API请求失败，状态码: {res_api.status_code if res_api else 'N/A'}")
+
+            user_info = res_api.json()
+            self.save_data("user_info", user_info)
+            logger.info("成功更新并保存了蜂巢用户信息。")
+
+            self._send_notification(
+                title="【✅ 蜂巢信息更新成功】",
+                text=f"已成功获取并刷新您的蜂巢论坛个人信息。\n"
+                     f"🕐 时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            )
+
+        except Exception as e:
+            logger.error(f"更新蜂巢用户信息失败: {e}")
+            self._send_notification(
+                title="【❌ 蜂巢信息更新失败】",
+                text=f"在尝试刷新您的蜂巢论坛个人信息时发生错误。\n"
+                     f"💬 原因：{e}\n"
+                     f"🕐 时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            )
+        finally:
+            # 确保任务执行后，开关状态在配置中被重置
+            self._update_info_now = False
+            self.update_config(self.get_config_dict())
 
     def __signin(self, retry_count=0, max_retries=3):
         """
@@ -226,7 +297,7 @@ class FengchaoSignin(_PluginBase):
         if hasattr(self, '_signing_in') and self._signing_in:
             logger.info("已有签到任务在执行，跳过当前任务")
             return
-            
+
         self._signing_in = True
         attempt = 0
         try:
@@ -248,16 +319,16 @@ class FengchaoSignin(_PluginBase):
                         )
                     )
                 return False
-                
+
             # 使用循环而非递归实现重试
             for attempt in range(max_retries + 1):
                 if attempt > 0:
                     logger.info(f"正在进行第 {attempt}/{max_retries} 次重试...")
                     time.sleep(3)  # 重试前等待3秒
-                    
+
                 # 获取代理设置
                 proxies = self._get_proxies()
-                
+
                 # 每次都重新登录获取cookie
                 logger.info(f"开始登录蜂巢论坛获取cookie...")
                 cookie = self._login_and_get_cookie(proxies)
@@ -266,9 +337,9 @@ class FengchaoSignin(_PluginBase):
                     if attempt < max_retries:
                         continue
                     raise Exception("登录失败，无法获取cookie")
-                
+
                 logger.info(f"登录成功，成功获取cookie")
-                
+
                 # 使用获取的cookie访问蜂巢
                 try:
                     res = RequestUtils(cookies=cookie, proxies=proxies, timeout=30).get_res(url="https://pting.club")
@@ -277,13 +348,13 @@ class FengchaoSignin(_PluginBase):
                     if attempt < max_retries:
                         continue
                     raise Exception("连接站点出错")
-                
+
                 if not res or res.status_code != 200:
                     logger.error(f"请求蜂巢返回错误状态码: {res.status_code if res else '无响应'}")
                     if attempt < max_retries:
                         continue
                     raise Exception("无法连接到站点")
-                
+
                 # 获取csrfToken
                 pattern = r'"csrfToken":"(.*?)"'
                 csrfToken = re.findall(pattern, res.text)
@@ -292,18 +363,18 @@ class FengchaoSignin(_PluginBase):
                     if attempt < max_retries:
                         continue
                     raise Exception("无法获取CSRF令牌")
-                
+
                 csrfToken = csrfToken[0]
                 logger.info(f"获取csrfToken成功 {csrfToken}")
-                
+
                 # 获取userid
                 pattern = r'"userId":(\d+)'
                 match = re.search(pattern, res.text)
-                
+
                 if match and match.group(1) != "0":
                     userId = match.group(1)
                     logger.info(f"获取userid成功 {userId}")
-                    
+
                     # 如果开启了蜂巢论坛PT人生数据更新，尝试更新数据
                     if self._mp_push_enabled:
                         self.__push_mp_stats(user_id=userId, csrf_token=csrfToken, cookie=cookie)
@@ -312,14 +383,14 @@ class FengchaoSignin(_PluginBase):
                     if attempt < max_retries:
                         continue
                     raise Exception("无法获取用户ID")
-                
+
                 # 准备签到请求
                 headers = {
                     "X-Csrf-Token": csrfToken,
                     "X-Http-Method-Override": "PATCH",
                     "Cookie": cookie
                 }
-                
+
                 data = {
                     "data": {
                         "type": "users",
@@ -330,11 +401,11 @@ class FengchaoSignin(_PluginBase):
                         "id": userId
                     }
                 }
-                
+
                 # 开始签到
                 try:
                     res = RequestUtils(headers=headers, proxies=proxies, timeout=30).post_res(
-                        url=f"https://pting.club/api/users/{userId}", 
+                        url=f"https://pting.club/api/users/{userId}",
                         json=data
                     )
                 except Exception as e:
@@ -342,13 +413,13 @@ class FengchaoSignin(_PluginBase):
                     if attempt < max_retries:
                         continue
                     raise Exception("签到请求异常")
-                
+
                 if not res or res.status_code != 200:
                     logger.error(f"蜂巢签到失败，状态码: {res.status_code if res else '无响应'}")
                     if attempt < max_retries:
                         continue
                     raise Exception("API请求错误")
-                
+
                 # 签到成功
                 sign_dict = json.loads(res.text)
 
@@ -360,7 +431,7 @@ class FengchaoSignin(_PluginBase):
                 totalContinuousCheckIn = sign_dict['data']['attributes']['totalContinuousCheckIn']
                 # 获取签到奖励花粉数量
                 lastCheckinMoney = sign_dict['data']['attributes'].get('lastCheckinMoney', 0)
-                
+
                 # 检查是否已签到
                 if "canCheckin" in sign_dict['data']['attributes'] and not sign_dict['data']['attributes']['canCheckin']:
                     status_text = "已签到"
@@ -370,7 +441,7 @@ class FengchaoSignin(_PluginBase):
                     status_text = "签到成功"
                     reward_text = f"获得{lastCheckinMoney}花粉奖励"
                     logger.info(f"蜂巢签到成功，获得{lastCheckinMoney}花粉，当前花粉: {money}，累计签到: {totalContinuousCheckIn}")
-                
+
                 # 发送通知
                 if self._notify:
                     self._send_notification(
@@ -388,7 +459,7 @@ class FengchaoSignin(_PluginBase):
                             f"━━━━━━━━━━"
                         )
                     )
-                
+
                 # 读取历史记录
                 history = {
                     "date": datetime.today().strftime('%Y-%m-%d %H:%M:%S'),
@@ -398,23 +469,23 @@ class FengchaoSignin(_PluginBase):
                     "lastCheckinMoney": lastCheckinMoney,
                     "failure_count": attempt
                 }
-                
+
                 # 保存签到历史
                 self._save_history(history)
-                
+
                 # 如果是重试后成功，重置重试计数
                 if self._current_retry > 0:
                     logger.info(f"蜂巢签到重试成功，重置重试计数")
                     self._current_retry = 0
-                
+
                 # 签到成功，退出循环
                 return True
-                    
+
         except Exception as e:
             logger.error(f"签到过程发生异常: {str(e)}")
             import traceback
             logger.error(f"错误详情: {traceback.format_exc()}")
-            
+
             # 保存失败记录
             failure_history_record = {
                 "date": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
@@ -423,10 +494,10 @@ class FengchaoSignin(_PluginBase):
                 "failure_count": attempt + 1
             }
             self._save_history(failure_history_record)
-            
+
             # 所有重试失败，发送通知并退出
             self._send_signin_failure_notification(str(e), attempt)
-            
+
             # 设置下次定时重试
             if self._retry_count > 0 and self._current_retry < self._retry_count:
                 self._current_retry += 1
@@ -437,7 +508,7 @@ class FengchaoSignin(_PluginBase):
                 if self._retry_count > 0:
                     logger.info("已达到最大定时重试次数，不再重试")
                 self._current_retry = 0
-            
+
             return False
         finally:
             # 释放锁
@@ -449,7 +520,7 @@ class FengchaoSignin(_PluginBase):
         """
         # 读取历史记录
         history = self.get_data('history') or []
-        
+
         # 如果是失败状态，添加重试信息
         if "失败" in record.get("status", ""):
             record["retry"] = {
@@ -458,20 +529,20 @@ class FengchaoSignin(_PluginBase):
                 "max": self._retry_count,
                 "interval": self._retry_interval
             }
-        
+
         # 添加新记录
         history.append(record)
-        
+
         # 保留指定天数的记录
         if self._history_days:
             try:
                 thirty_days_ago = time.time() - int(self._history_days) * 24 * 60 * 60
                 history = [record for record in history if
-                          datetime.strptime(record["date"],
-                                         '%Y-%m-%d %H:%M:%S').timestamp() >= thirty_days_ago]
+                           datetime.strptime(record["date"],
+                                             '%Y-%m-%d %H:%M:%S').timestamp() >= thirty_days_ago]
             except Exception as e:
                 logger.error(f"清理历史记录异常: {str(e)}")
-        
+
         # 保存历史记录
         self.save_data(key="history", value=history)
 
@@ -497,7 +568,7 @@ class FengchaoSignin(_PluginBase):
         }]
         """
         services = []
-        
+
         if self._enabled and self._cron:
             services.append({
                 "id": "FengchaoSignin",
@@ -506,16 +577,16 @@ class FengchaoSignin(_PluginBase):
                 "func": self.__signin,
                 "kwargs": {}
             })
-        
+
         if self._enabled and self._mp_push_enabled:
             services.append({
                 "id": "MoviePilotStatsPush",
                 "name": "蜂巢论坛PT人生数据更新服务",
                 "trigger": "interval",
                 "func": self.__check_and_push_mp_stats,
-                "kwargs": {"hours": 6} # 每6小时检查一次是否需要推送
+                "kwargs": {"hours": 6}  # 每6小时检查一次是否需要推送
             })
-            
+
         return services
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
@@ -595,6 +666,12 @@ class FengchaoSignin(_PluginBase):
                                                     }
                                                 ]
                                             },
+                                        ]
+                                    },
+                                    # 操作开关
+                                    {
+                                        'component': 'VRow',
+                                        'content': [
                                             {
                                                 'component': 'VCol',
                                                 'props': {
@@ -606,7 +683,25 @@ class FengchaoSignin(_PluginBase):
                                                         'component': 'VSwitch',
                                                         'props': {
                                                             'model': 'onlyonce',
-                                                            'label': '立即运行一次',
+                                                            'label': '立即运行一次签到',
+                                                            'hint': '仅执行一次签到任务'
+                                                        }
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                'component': 'VCol',
+                                                'props': {
+                                                    'cols': 12,
+                                                    'md': 4
+                                                },
+                                                'content': [
+                                                    {
+                                                        'component': 'VSwitch',
+                                                        'props': {
+                                                            'model': 'update_info_now',
+                                                            'label': '立即更新个人信息',
+                                                            'hint': '不执行签到，仅刷新插件页面显示的用户信息'
                                                         }
                                                     }
                                                 ]
@@ -849,6 +944,7 @@ class FengchaoSignin(_PluginBase):
             "notify": True,
             "cron": "30 8 * * *",
             "onlyonce": False,
+            "update_info_now": False,
             "cookie": "",
             "username": "",
             "password": "",
@@ -885,13 +981,13 @@ class FengchaoSignin(_PluginBase):
             'fa-star': 'mdi-star',
             'fa-gem': 'mdi-diamond'
         }
-        
+
         # Extract the core part of the icon class (e.g., from 'fas fa-user-tie' to 'fa-user-tie')
         match = re.search(r'fa-[\w-]+', icon_class)
         if match:
             core_icon = match.group(0)
             return mapping.get(core_icon, 'mdi-account-group')
-        
+
         return 'mdi-account-group'
 
     def _format_pollen(self, value: Any) -> str:
@@ -923,14 +1019,14 @@ class FengchaoSignin(_PluginBase):
 
         # 定义样式，方便复用
         frost_style = 'background-color: rgba(255, 255, 255, 0.75); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 8px;'
-        
+
         if user_info and 'data' in user_info and 'attributes' in user_info['data']:
             user_attrs = user_info['data']['attributes']
 
             # 获取用户基本信息
             username = user_attrs.get('displayName', '未知用户')
             avatar_url = user_attrs.get('avatarUrl', '')
-            
+
             # 格式化花粉
             money = self._format_pollen(user_attrs.get('money', 0))
 
@@ -942,7 +1038,7 @@ class FengchaoSignin(_PluginBase):
             total_continuous_checkin = user_attrs.get('totalContinuousCheckIn', 0)
             join_time = user_attrs.get('joinTime', '')
             last_seen_at = user_attrs.get('lastSeenAt', '')
-            
+
             # 获取背景图，优先使用主页背景，其次使用封面图
             background_image = user_attrs.get('decorationProfileBackground') or user_attrs.get('cover')
 
@@ -955,7 +1051,8 @@ class FengchaoSignin(_PluginBase):
 
             if last_seen_at:
                 try:
-                    last_seen_at = datetime.fromisoformat(last_seen_at.replace('Z', '+00:00')).strftime('%Y-%m-%d %H:%M')
+                    last_seen_at = datetime.fromisoformat(last_seen_at.replace('Z', '+00:00')).strftime(
+                        '%Y-%m-%d %H:%M')
                 except:
                     last_seen_at = '未知'
 
@@ -977,9 +1074,9 @@ class FengchaoSignin(_PluginBase):
                 core_badge_info = badge_item.get('badge', {})
                 if not core_badge_info:
                     continue
-                
+
                 category_info = core_badge_info.get('category', {})
-                
+
                 badges.append({
                     'name': core_badge_info.get('name', '未知徽章'),
                     'icon': core_badge_info.get('icon', 'fas fa-award'),
@@ -987,15 +1084,15 @@ class FengchaoSignin(_PluginBase):
                     'image': core_badge_info.get('image'),
                     'category': category_info.get('name', '其他')
                 })
-            
+
             badge_count = len(badges)
-            
+
             # 将徽章按分类分组
             categorized_badges = defaultdict(list)
             for badge in badges:
                 category_name = badge.get('category', '其他')
                 categorized_badges[category_name].append(badge)
-            
+
             # 构建分类徽章组件
             badge_category_components = []
             if categorized_badges:
@@ -1007,7 +1104,9 @@ class FengchaoSignin(_PluginBase):
                             'component': 'div',
                             'props': {'class': 'ma-1 pa-2', 'style': f'{frost_style} border-radius: 12px;'},
                             'content': [
-                                {'component': 'div', 'props': {'class': 'text-subtitle-2 grey--text text--darken-1', 'style': 'text-align: center;'}, 'text': category_name},
+                                {'component': 'div',
+                                 'props': {'class': 'text-subtitle-2 grey--text text--darken-1',
+                                           'style': 'text-align: center;'}, 'text': category_name},
                                 {'component': 'VDivider', 'props': {'class': 'my-1'}},
                                 {
                                     'component': 'div',
@@ -1024,23 +1123,29 @@ class FengchaoSignin(_PluginBase):
                                                 {
                                                     'component': 'VImg' if badge.get('image') else 'VIcon',
                                                     'props': ({
-                                                        'src': badge.get('image'),
-                                                        'height': '32',
-                                                        'width': '32',
-                                                        'class': 'mb-1'
-                                                    } if badge.get('image') else {
+                                                                  'src': badge.get('image'),
+                                                                  'height': '48',
+                                                                  'width': '48',
+                                                                  'class': 'mb-1'
+                                                              } if badge.get('image') else {
                                                         'icon': self._map_fa_to_mdi(badge.get('icon')),
-                                                        'size': '32',
+                                                        'size': '48',
                                                         'class': 'mb-1'
                                                     })
                                                 },
                                                 {
                                                     'component': 'div',
-                                                    'props': {
-                                                        'class': 'text-caption',
-                                                        'style': 'white-space: normal; line-height: 1.2; font-weight: 500; text-align: center;'
-                                                    },
-                                                    'text': badge.get('name', '未知徽章')
+                                                    'props': {'class': 'marquee-text-wrapper', 'style': 'width: 100%'},
+                                                    'content': [
+                                                        {
+                                                            'component': 'div',
+                                                            'props': {
+                                                                'class': 'text-caption marquee-text',
+                                                                'style': 'white-space: normal; line-height: 1.2; font-weight: 500; text-align: center;'
+                                                            },
+                                                            'text': badge.get('name', '未知徽章')
+                                                        }
+                                                    ]
                                                 }
                                             ]
                                         } for badge in badge_list
@@ -1099,14 +1204,16 @@ class FengchaoSignin(_PluginBase):
                                                                  {'component': 'VChip', 'props': {
                                                                      'style': f"background-color: {group.get('color', '#6B7CA8')}; color: white;",
                                                                      'size': 'small', 'class': 'mr-1 mb-1',
-                                                                     'variant': 'elevated'}, 
+                                                                     'variant': 'elevated'},
                                                                   'content': [
-                                                                        {
-                                                                            'component': 'VIcon',
-                                                                            'props': {'start': True, 'size': 'small'},
-                                                                            'text': group.get('icon')
-                                                                        },
-                                                                        {'component': 'span', 'text': group.get('name')}
+                                                                      {
+                                                                          'component': 'VIcon',
+                                                                          'props': {'start': True,
+                                                                                    'size': 'small'},
+                                                                          'text': group.get('icon')
+                                                                      },
+                                                                      {'component': 'span',
+                                                                       'text': group.get('name')}
                                                                   ]} for group in groups
                                                              ]}
                                                         ]
@@ -1308,7 +1415,7 @@ class FengchaoSignin(_PluginBase):
             components = []
             if user_info_card:
                 components.append(user_info_card)
-                
+
             components.extend([
                 {
                     'component': 'VAlert',
@@ -1394,15 +1501,15 @@ class FengchaoSignin(_PluginBase):
                 }
             ])
             return components
-        
+
         # 按时间倒序排列历史
         history = sorted(history, key=lambda x: x.get("date", ""), reverse=True)
-        
+
         # 构建历史记录表格行
         history_rows = []
         for record in history:
             status_text = record.get("status", "未知")
-            
+
             # 根据状态设置颜色和图标
             if "签到成功" in status_text or "已签到" in status_text:
                 status_color = "success"
@@ -1410,7 +1517,7 @@ class FengchaoSignin(_PluginBase):
             else:
                 status_color = "error"
                 status_icon = "mdi-close-circle"
-            
+
             # 格式化花粉
             money_text = self._format_pollen(record.get('money'))
 
@@ -1448,7 +1555,7 @@ class FengchaoSignin(_PluginBase):
                                     },
                                     {
                                         'component': 'span',
-                                'text': status_text
+                                        'text': status_text
                                     }
                                 ]
                             },
@@ -1456,7 +1563,9 @@ class FengchaoSignin(_PluginBase):
                             {
                                 'component': 'div',
                                 'props': {'class': 'mt-1 text-caption grey--text'},
-                                'text': f"将在{record.get('retry', {}).get('interval', self._retry_interval)}小时后重试 ({record.get('retry', {}).get('current', 0)}/{record.get('retry', {}).get('max', self._retry_count)})" if status_color == 'error' and record.get('retry', {}).get('enabled', False) and record.get('retry', {}).get('current', 0) > 0 else ""
+                                'text': f"将在{record.get('retry', {}).get('interval', self._retry_interval)}小时后重试 ({record.get('retry', {}).get('current', 0)}/{record.get('retry', {}).get('max', self._retry_count)})" if status_color == 'error' and record.get(
+                                    'retry', {}).get('enabled', False) and record.get('retry', {}).get('current',
+                                                                                                      0) > 0 else ""
                             }
                         ]
                     },
@@ -1537,7 +1646,9 @@ class FengchaoSignin(_PluginBase):
                                     },
                                     {
                                         'component': 'span',
-                                        'text': f"{self._format_pollen(record.get('lastCheckinMoney', 0))}花粉" if ("签到成功" in status_text or "已签到" in status_text) and record.get('lastCheckinMoney', 0) > 0 else '—'
+                                        'text': f"{self._format_pollen(record.get('lastCheckinMoney', 0))}花粉" if (
+                                                                                                                         "签到成功" in status_text or "已签到" in status_text) and record.get(
+                                            'lastCheckinMoney', 0) > 0 else '—'
                                     }
                                 ]
                             }
@@ -1545,44 +1656,44 @@ class FengchaoSignin(_PluginBase):
                     }
                 ]
             })
-        
+
         # 最终页面组装
         components = []
-        
+
         # 添加用户信息卡（如果有）
         if user_info_card:
             components.append(user_info_card)
-            
+
         # 添加历史记录表
         components.append({
-                'component': 'VCard',
-                'props': {'variant': 'outlined', 'class': 'mb-4'},
-                'content': [
-                    {
-                        'component': 'VCardTitle',
-                        'props': {'class': 'd-flex align-center'},
-                        'content': [
-                            {
-                                'component': 'VIcon',
-                                'props': {
+            'component': 'VCard',
+            'props': {'variant': 'outlined', 'class': 'mb-4'},
+            'content': [
+                {
+                    'component': 'VCardTitle',
+                    'props': {'class': 'd-flex align-center'},
+                    'content': [
+                        {
+                            'component': 'VIcon',
+                            'props': {
                                 'style': 'color: #9C27B0;',
-                                    'class': 'mr-2'
-                                },
-                                'text': 'mdi-calendar-check'
+                                'class': 'mr-2'
                             },
-                            {
-                                'component': 'span',
+                            'text': 'mdi-calendar-check'
+                        },
+                        {
+                            'component': 'span',
                             'props': {'class': 'text-h6 font-weight-bold'},
-                                'text': '蜂巢签到历史'
-                            },
-                            {
-                                'component': 'VSpacer'
-                            },
-                            {
-                                'component': 'VChip',
-                                'props': {
+                            'text': '蜂巢签到历史'
+                        },
+                        {
+                            'component': 'VSpacer'
+                        },
+                        {
+                            'component': 'VChip',
+                            'props': {
                                 'style': 'background-color: #FF9800; color: white;',
-                                    'size': 'small',
+                                'size': 'small',
                                 'variant': 'elevated'
                             },
                             'content': [
@@ -1597,59 +1708,59 @@ class FengchaoSignin(_PluginBase):
                                 },
                                 {
                                     'component': 'span',
-                                'text': '每日可得花粉奖励'
+                                    'text': '每日可得花粉奖励'
                                 }
                             ]
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VDivider'
-                    },
-                    {
-                        'component': 'VCardText',
-                        'props': {'class': 'pa-2'},
-                        'content': [
-                            {
-                                'component': 'VTable',
-                                'props': {
-                                    'hover': True,
-                                    'density': 'comfortable'
+                        }
+                    ]
+                },
+                {
+                    'component': 'VDivider'
+                },
+                {
+                    'component': 'VCardText',
+                    'props': {'class': 'pa-2'},
+                    'content': [
+                        {
+                            'component': 'VTable',
+                            'props': {
+                                'hover': True,
+                                'density': 'comfortable'
+                            },
+                            'content': [
+                                # 表头
+                                {
+                                    'component': 'thead',
+                                    'content': [
+                                        {
+                                            'component': 'tr',
+                                            'content': [
+                                                {'component': 'th', 'text': '时间'},
+                                                {'component': 'th', 'text': '状态'},
+                                                {'component': 'th', 'text': '失败次数'},
+                                                {'component': 'th', 'text': '花粉'},
+                                                {'component': 'th', 'text': '签到天数'},
+                                                {'component': 'th', 'text': '奖励'}
+                                            ]
+                                        }
+                                    ]
                                 },
-                                'content': [
-                                    # 表头
-                                    {
-                                        'component': 'thead',
-                                        'content': [
-                                            {
-                                                'component': 'tr',
-                                                'content': [
-                                                    {'component': 'th', 'text': '时间'},
-                                                    {'component': 'th', 'text': '状态'},
-                                                    {'component': 'th', 'text': '失败次数'},
-                                                    {'component': 'th', 'text': '花粉'},
-                                                    {'component': 'th', 'text': '签到天数'},
-                                                    {'component': 'th', 'text': '奖励'}
-                                                ]
-                                            }
-                                        ]
-                                    },
-                                    # 表内容
-                                    {
-                                        'component': 'tbody',
-                                        'content': history_rows
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                ]
+                                # 表内容
+                                {
+                                    'component': 'tbody',
+                                    'content': history_rows
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
         })
-        
-        # 添加基本样式
+
+        # 添加基本样式和滚动动画样式
         components.append({
-                'component': 'style',
-                'text': """
+            'component': 'style',
+            'text': """
                 .v-table {
                     border-radius: 8px;
                     overflow: hidden;
@@ -1660,9 +1771,22 @@ class FengchaoSignin(_PluginBase):
                     color: rgb(var(--v-theme-primary));
                     font-weight: 600;
                 }
+                .marquee-text-wrapper {
+                    overflow: hidden;
+                    white-space: nowrap;
+                }
+                .marquee-text {
+                    display: inline-block;
+                    padding-left: 100%;
+                    animation: marquee-scroll 8s linear infinite;
+                }
+                @keyframes marquee-scroll {
+                    0% { transform: translate(0, 0); }
+                    100% { transform: translate(-100%, 0); }
+                }
                 """
         })
-        
+
         return components
 
     def stop_service(self):
@@ -1676,7 +1800,7 @@ class FengchaoSignin(_PluginBase):
                     self._scheduler.shutdown()
                 self._scheduler = None
         except Exception as e:
-            logger.error("退出插件失败：%s" % str(e)) 
+            logger.error("退出插件失败：%s" % str(e))
 
     def __check_and_push_mp_stats(self):
         """检查是否需要更新蜂巢论坛PT人生数据"""
@@ -1684,23 +1808,23 @@ class FengchaoSignin(_PluginBase):
         if hasattr(self, '_pushing_stats') and self._pushing_stats:
             logger.info("已有更新PT人生数据任务在执行，跳过当前任务")
             return
-            
+
         self._pushing_stats = True
         try:
             if not self._mp_push_enabled:
                 logger.info("蜂巢论坛PT人生数据更新未启用")
                 return
-                
+
             if not self._username or not self._password:
                 logger.error("未配置用户名密码，无法更新PT人生数据")
                 return
-                
+
             # 获取代理设置
             proxies = self._get_proxies()
-            
+
             # 获取当前时间
             now = datetime.now()
-            
+
             # 如果设置了最后推送时间，检查是否需要推送
             if self._last_push_time:
                 last_push = datetime.strptime(self._last_push_time, '%Y-%m-%d %H:%M:%S')
@@ -1710,26 +1834,26 @@ class FengchaoSignin(_PluginBase):
                 if delta.days < self._mp_push_interval:
                     logger.info(f"距离上次更新PT人生数据时间不足{self._mp_push_interval}天，跳过更新")
                     return
-            
+
             logger.info(f"开始更新蜂巢论坛PT人生数据...")
-            
+
             # 登录获取cookie
             cookie = self._login_and_get_cookie(proxies)
             if not cookie:
                 logger.error("登录失败，无法获取cookie进行PT人生数据更新")
                 return
-                
+
             # 使用获取的cookie访问蜂巢获取必要信息
             try:
                 res = RequestUtils(cookies=cookie, proxies=proxies, timeout=30).get_res(url="https://pting.club")
             except Exception as e:
                 logger.error(f"请求蜂巢出错: {str(e)}")
                 return
-            
+
             if not res or res.status_code != 200:
                 logger.error(f"请求蜂巢返回错误状态码: {res.status_code if res else '无响应'}")
                 return
-                
+
             # 获取CSRF令牌
             pattern = r'"csrfToken":"(.*?)"'
             csrf_matches = re.findall(pattern, res.text)
@@ -1737,7 +1861,7 @@ class FengchaoSignin(_PluginBase):
                 logger.error("获取CSRF令牌失败，无法进行PT人生数据更新")
                 return
             csrf_token = csrf_matches[0]
-            
+
             # 获取用户ID
             pattern = r'"userId":(\d+)'
             user_matches = re.search(pattern, res.text)
@@ -1745,7 +1869,7 @@ class FengchaoSignin(_PluginBase):
                 logger.error("获取用户ID失败，无法进行PT人生数据更新")
                 return
             user_id = user_matches.group(1)
-            
+
             # 执行推送
             self.__push_mp_stats(user_id=user_id, csrf_token=csrf_token, cookie=cookie)
         finally:
@@ -1762,57 +1886,58 @@ class FengchaoSignin(_PluginBase):
         if not user_id or not csrf_token or not cookie:
             logger.error("用户ID、CSRF令牌或Cookie为空，无法更新PT人生数据")
             return
-        
+
         # 使用循环而非递归实现重试
         for attempt in range(retry_count, max_retries + 1):
             if attempt > retry_count:
                 logger.info(f"更新失败，正在进行第 {attempt - retry_count}/{max_retries - retry_count} 次重试...")
                 time.sleep(3)  # 重试前等待3秒
-            
+
             try:
                 now = datetime.now()
                 logger.info(f"开始获取站点统计数据以更新蜂巢论坛PT人生数据 (用户ID: {user_id})")
-                
+
                 # 获取站点统计数据，使用类成员变量缓存，避免重复获取
                 if not hasattr(self, '_cached_stats_data') or self._cached_stats_data is None or \
-                   not hasattr(self, '_cached_stats_time') or \
-                   (now - self._cached_stats_time).total_seconds() > 3600:  # 缓存1小时
+                        not hasattr(self, '_cached_stats_time') or \
+                        (now - self._cached_stats_time).total_seconds() > 3600:  # 缓存1小时
                     self._cached_stats_data = self._get_site_statistics()
                     self._cached_stats_time = now
                     logger.info("获取最新站点统计数据")
                 else:
                     logger.info(f"使用缓存的站点统计数据（缓存时间：{self._cached_stats_time.strftime('%Y-%m-%d %H:%M:%S')}）")
-                
+
                 stats_data = self._cached_stats_data
                 if not stats_data:
                     logger.error("获取站点统计数据失败，无法更新PT人生数据")
                     if attempt < max_retries:
                         continue
                     return
-                    
+
                 # 格式化数据，使用类成员变量缓存，避免重复格式化
                 if not hasattr(self, '_cached_formatted_stats') or self._cached_formatted_stats is None or \
-                   not hasattr(self, '_cached_stats_time') or \
-                   (now - self._cached_stats_time).total_seconds() > 3600:  # 缓存1小时
+                        not hasattr(self, '_cached_stats_time') or \
+                        (now - self._cached_stats_time).total_seconds() > 3600:  # 缓存1小时
                     self._cached_formatted_stats = self._format_stats_data(stats_data)
                     logger.info("格式化最新站点统计数据")
                 else:
                     logger.info("使用缓存的已格式化站点统计数据")
-                
+
                 formatted_stats = self._cached_formatted_stats
                 if not formatted_stats:
                     logger.error("格式化站点统计数据失败，无法更新PT人生数据")
                     if attempt < max_retries:
                         continue
                     return
-                
+
                 # 记录第一个站点的数据以便确认所有字段是否都被正确传递
                 if formatted_stats.get("sites") and len(formatted_stats.get("sites")) > 0:
                     first_site = formatted_stats.get("sites")[0]
-                    logger.info(f"推送数据示例：站点={first_site.get('name')}, 用户名={first_site.get('username')}, 等级={first_site.get('user_level')}, "
-                                f"上传={first_site.get('upload')}, 下载={first_site.get('download')}, 分享率={first_site.get('ratio')}, "
-                                f"魔力值={first_site.get('bonus')}, 做种数={first_site.get('seeding')}, 做种体积={first_site.get('seeding_size')}")
-                
+                    logger.info(
+                        f"推送数据示例：站点={first_site.get('name')}, 用户名={first_site.get('username')}, 等级={first_site.get('user_level')}, "
+                        f"上传={first_site.get('upload')}, 下载={first_site.get('download')}, 分享率={first_site.get('ratio')}, "
+                        f"魔力值={first_site.get('bonus')}, 做种数={first_site.get('seeding')}, 做种体积={first_site.get('seeding_size')}")
+
                 # 检查数据大小，站点数量过多可能导致请求失败
                 sites = formatted_stats.get("sites", [])
                 if len(sites) > 300:
@@ -1820,7 +1945,7 @@ class FengchaoSignin(_PluginBase):
                     logger.warning(f"站点数据过多({len(sites)}个)，将只推送做种数最多的前300个站点")
                     sites.sort(key=lambda x: x.get("seeding", 0), reverse=True)
                     formatted_stats["sites"] = sites[:300]
-                    
+
                 # 准备请求头和请求体
                 headers = {
                     "X-Csrf-Token": csrf_token,
@@ -1828,7 +1953,7 @@ class FengchaoSignin(_PluginBase):
                     "Content-Type": "application/json",
                     "Cookie": cookie
                 }
-                
+
                 # 创建请求数据
                 data = {
                     "data": {
@@ -1840,23 +1965,23 @@ class FengchaoSignin(_PluginBase):
                         "id": user_id
                     }
                 }
-                
+
                 # 输出JSON数据片段以便确认
                 json_data = json.dumps(formatted_stats.get("sites", []))
                 if len(json_data) > 500:
                     logger.info(f"推送的JSON数据片段: {json_data[:500]}...")
-                    logger.info(f"推送数据大小约为: {len(json_data)/1024:.2f} KB")
+                    logger.info(f"推送数据大小约为: {len(json_data) / 1024:.2f} KB")
                 else:
                     logger.info(f"推送的JSON数据: {json_data}")
-                    logger.info(f"推送数据大小约为: {len(json_data)/1024:.2f} KB")
-                
+                    logger.info(f"推送数据大小约为: {len(json_data) / 1024:.2f} KB")
+
                 # 获取代理设置
                 proxies = self._get_proxies()
-                
+
                 # 发送请求
                 url = f"https://pting.club/api/users/{user_id}"
                 logger.info(f"准备更新蜂巢论坛PT人生数据: {len(formatted_stats.get('sites', []))} 个站点")
-                
+
                 try:
                     res = RequestUtils(headers=headers, proxies=proxies, timeout=60).post_res(url=url, json=data)
                 except Exception as e:
@@ -1866,13 +1991,14 @@ class FengchaoSignin(_PluginBase):
                     # 所有重试都失败
                     logger.error("所有重试都失败，放弃更新")
                     return
-                
+
                 if res and res.status_code == 200:
-                    logger.info(f"成功更新蜂巢论坛PT人生数据: 总上传 {round(formatted_stats['summary']['total_upload']/1024/1024/1024, 2)} GB, 总下载 {round(formatted_stats['summary']['total_download']/1024/1024/1024, 2)} GB")
+                    logger.info(
+                        f"成功更新蜂巢论坛PT人生数据: 总上传 {round(formatted_stats['summary']['total_upload'] / 1024 / 1024 / 1024, 2)} GB, 总下载 {round(formatted_stats['summary']['total_download'] / 1024 / 1024 / 1024, 2)} GB")
                     # 更新最后推送时间
                     self._last_push_time = now.strftime('%Y-%m-%d %H:%M:%S')
                     self.save_data('last_push_time', self._last_push_time)
-                    
+
                     # 清除缓存，确保下次获取新数据
                     if hasattr(self, '_cached_stats_data'):
                         self._cached_stats_data = None
@@ -1881,7 +2007,7 @@ class FengchaoSignin(_PluginBase):
                     if hasattr(self, '_cached_stats_time'):
                         delattr(self, '_cached_stats_time')
                     logger.info("已清除站点数据缓存，下次将获取最新数据")
-                    
+
                     if self._notify:
                         self._send_notification(
                             title="【✅ 蜂巢论坛PT人生数据更新成功】",
@@ -1896,10 +2022,11 @@ class FengchaoSignin(_PluginBase):
                         )
                     return True
                 else:
-                    logger.error(f"更新蜂巢论坛PT人生数据失败：{res.status_code if res else '请求失败'}, 响应: {res.text[:100] if res and hasattr(res, 'text') else '无响应内容'}")
+                    logger.error(
+                        f"更新蜂巢论坛PT人生数据失败：{res.status_code if res else '请求失败'}, 响应: {res.text[:100] if res and hasattr(res, 'text') else '无响应内容'}")
                     if attempt < max_retries:
                         continue
-                        
+
                     # 所有重试都失败，发送通知
                     if self._notify:
                         self._send_notification(
@@ -1918,15 +2045,15 @@ class FengchaoSignin(_PluginBase):
                             )
                         )
                     return False
-                
+
             except Exception as e:
                 logger.error(f"更新过程发生异常: {str(e)}")
                 import traceback
                 logger.error(f"错误详情: {traceback.format_exc()}")
-                
+
                 if attempt < max_retries:
                     continue
-                
+
                 # 所有重试都失败
                 if self._notify:
                     self._send_notification(
@@ -1952,27 +2079,27 @@ class FengchaoSignin(_PluginBase):
             from app.db.site_oper import SiteOper
             from app.helper.sites import SitesHelper
             from app.db.models.siteuserdata import SiteUserData
-            
+
             # 初始化SiteOper
             site_oper = SiteOper()
             # 初始化SitesHelper
             sites_helper = SitesHelper()
-            
+
             # 获取所有管理中的站点
             managed_sites = sites_helper.get_indexers()
             managed_site_names = [site.get("name") for site in managed_sites if site.get("name")]
-            
+
             logger.info(f"MoviePilot管理中的站点: {len(managed_site_names)}个")
-            
+
             # 获取站点数据 - 使用get_userdata()方法
             raw_data_list = site_oper.get_userdata()
-            
+
             if not raw_data_list:
                 logger.error("未获取到站点数据")
                 return None
-            
+
             logger.info(f"成功获取到 {len(raw_data_list)} 条原始站点数据记录")
-            
+
             # 打印第一条数据的所有字段，用于调试
             if raw_data_list and len(raw_data_list) > 0:
                 first_data = raw_data_list[0]
@@ -1981,27 +2108,27 @@ class FengchaoSignin(_PluginBase):
                     data_dict.pop("_sa_instance_state")
                 logger.info(f"站点数据示例字段: {list(data_dict.keys())}")
                 logger.info(f"站点数据示例值: {data_dict}")
-            
+
             # 每个站点只保留最新的一条数据（参考站点统计插件的__get_data方法）
             # 使用站点名称和日期组合作为键，确保每个站点每天只有一条记录
             data_dict = {f"{data.updated_day}_{data.name}": data for data in raw_data_list}
             data_list = list(data_dict.values())
-            
+
             # 按日期倒序排序
             data_list.sort(key=lambda x: x.updated_day, reverse=True)
-            
+
             # 获取每个站点的最新数据，并只保留MoviePilot管理中的站点
             site_names = set()
             latest_site_data = []
-            
+
             for data in data_list:
                 # 过滤出MoviePilot管理中的站点
                 if data.name not in site_names and data.name in managed_site_names:
                     site_names.add(data.name)
                     latest_site_data.append(data)
-            
+
             logger.info(f"处理后得到 {len(latest_site_data)} 个站点的最新数据")
-                
+
             # 转换为字典格式
             sites = []
             for site_data in latest_site_data:
@@ -2011,13 +2138,13 @@ class FengchaoSignin(_PluginBase):
                 if "_sa_instance_state" in site_dict:
                     site_dict.pop("_sa_instance_state")
                 sites.append(site_dict)
-                
+
             # 记录几个站点的名称作为示例
             sample_sites = [site.get("name") for site in sites[:3] if site.get("name")]
             logger.info(f"站点数据示例: {', '.join(sample_sites) if sample_sites else '无'}")
-                
+
             return {"sites": sites}
-                
+
         except ImportError as e:
             logger.error(f"导入站点操作模块失败: {str(e)}")
             # 降级到API方式获取
@@ -2026,45 +2153,45 @@ class FengchaoSignin(_PluginBase):
             logger.error(f"获取站点统计数据出错: {str(e)}")
             # 降级到API方式获取
             return self._get_site_statistics_via_api()
-            
+
     def _get_site_statistics_via_api(self):
         """通过API获取站点统计数据（备用方法）"""
         try:
             # 导入SitesHelper
             from app.helper.sites import SitesHelper
-            
+
             # 初始化SitesHelper
             sites_helper = SitesHelper()
-            
+
             # 获取所有管理中的站点
             managed_sites = sites_helper.get_indexers()
             managed_site_names = [site.get("name") for site in managed_sites if site.get("name")]
-            
+
             logger.info(f"MoviePilot管理中的站点: {len(managed_site_names)}个")
-            
+
             # 使用正确的API URL
             api_url = f"{settings.HOST}/api/v1/site/statistics"
-            
+
             # 使用全局API KEY
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {settings.API_TOKEN}"
             }
-            
+
             logger.info(f"尝试通过API获取站点数据: {api_url}")
             res = RequestUtils(headers=headers).get_res(url=api_url)
             if res and res.status_code == 200:
                 data = res.json()
                 all_sites = data.get("sites", [])
-                
+
                 # 过滤只保留MoviePilot管理中的站点
                 sites = [site for site in all_sites if site.get("name") in managed_site_names]
-                
+
                 logger.info(f"通过API成功获取 {len(all_sites)} 个站点数据，过滤后保留 {len(sites)} 个站点")
-                
+
                 # 更新数据中的sites字段
                 data["sites"] = sites
-                
+
                 return data
             else:
                 logger.error(f"获取站点统计数据失败: {res.status_code if res else '连接失败'}")
@@ -2072,16 +2199,16 @@ class FengchaoSignin(_PluginBase):
         except Exception as e:
             logger.error(f"获取站点统计数据出错: {str(e)}")
             return None
-            
+
     def _format_stats_data(self, stats_data):
         """格式化站点统计数据"""
         try:
             if not stats_data or not stats_data.get("sites"):
                 return None
-                
+
             sites = stats_data.get("sites", [])
             logger.info(f"开始格式化 {len(sites)} 个站点的数据")
-            
+
             # 汇总数据
             total_upload = 0
             total_download = 0
@@ -2089,32 +2216,32 @@ class FengchaoSignin(_PluginBase):
             total_seed_size = 0
             site_details = []
             valid_sites_count = 0
-            
+
             # 处理每个站点数据
             for site in sites:
                 if not site.get("name") or site.get("error"):
                     continue
-                
+
                 valid_sites_count += 1
-                
+
                 # 计算分享率
                 upload = float(site.get("upload", 0))
                 download = float(site.get("download", 0))
                 ratio = round(upload / download, 2) if download > 0 else float('inf')
-                
+
                 # 汇总
                 total_upload += upload
                 total_download += download
                 total_seed += int(site.get("seeding", 0))
                 total_seed_size += float(site.get("seeding_size", 0))
-                
+
                 # 确保数值类型字段有默认值
                 username = site.get("username", "")
                 user_level = site.get("user_level", "")
                 bonus = site.get("bonus", 0)
                 seeding = site.get("seeding", 0)
                 seeding_size = site.get("seeding_size", 0)
-                
+
                 # 将所有需要的字段保存到站点详情中
                 site_details.append({
                     "name": site.get("name"),
@@ -2127,11 +2254,12 @@ class FengchaoSignin(_PluginBase):
                     "seeding": seeding,
                     "seeding_size": seeding_size
                 })
-                
+
                 # 记录日志确认某个特定站点的数据是否包含所有字段
                 if site.get("name") == sites[0].get("name"):
-                    logger.info(f"站点 {site.get('name')} 数据: 用户名={username}, 等级={user_level}, 魔力值={bonus}, 做种大小={seeding_size}")
-            
+                    logger.info(
+                        f"站点 {site.get('name')} 数据: 用户名={username}, 等级={user_level}, 魔力值={bonus}, 做种大小={seeding_size}")
+
             # 构建结果
             result = {
                 "summary": {
@@ -2143,13 +2271,14 @@ class FengchaoSignin(_PluginBase):
                 },
                 "sites": site_details
             }
-            
-            logger.info(f"数据格式化完成: 有效站点 {valid_sites_count} 个，总上传 {round(total_upload/1024/1024/1024, 2)} GB，总下载 {round(total_download/1024/1024/1024, 2)} GB，总做种数 {total_seed}")
-            
+
+            logger.info(
+                f"数据格式化完成: 有效站点 {valid_sites_count} 个，总上传 {round(total_upload / 1024 / 1024 / 1024, 2)} GB，总下载 {round(total_download / 1024 / 1024 / 1024, 2)} GB，总做种数 {total_seed}")
+
             return result
         except Exception as e:
             logger.error(f"格式化站点统计数据出错: {str(e)}")
-            return None 
+            return None
 
     def _login_and_get_cookie(self, proxies=None):
         """
@@ -2157,7 +2286,7 @@ class FengchaoSignin(_PluginBase):
         """
         try:
             logger.info(f"开始使用用户名'{self._username}'登录蜂巢论坛...")
-            
+
             # 采用用户测试成功的方法
             return self._login_postman_method(proxies=proxies)
         except Exception as e:
@@ -2165,7 +2294,7 @@ class FengchaoSignin(_PluginBase):
             import traceback
             logger.error(f"详细错误: {traceback.format_exc()}")
             return None
-            
+
     def _login_postman_method(self, proxies=None):
         """
         使用Postman方式登录（先获取CSRF和cookie，再登录）
@@ -2174,16 +2303,16 @@ class FengchaoSignin(_PluginBase):
             req = RequestUtils(proxies=proxies, timeout=30)
             proxy_info = "代理" if proxies else "直接连接"
             logger.info(f"使用Postman方式登录 (使用{proxy_info})...")
-            
+
             # 第一步：GET请求获取CSRF和初始cookie
             logger.info(f"步骤1: GET请求获取CSRF和初始cookie (使用{proxy_info})...")
-            
+
             headers = {
                 "Accept": "*/*",
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
                 "Cache-Control": "no-cache"
             }
-            
+
             try:
                 res = req.get_res("https://pting.club", headers=headers)
                 if not res or res.status_code != 200:
@@ -2192,7 +2321,7 @@ class FengchaoSignin(_PluginBase):
             except Exception as e:
                 logger.error(f"GET请求异常 (使用{proxy_info}): {str(e)}")
                 return None
-                
+
             # 获取CSRF令牌（从响应头）
             csrf_token = res.headers.get('x-csrf-token')
             if not csrf_token:
@@ -2204,9 +2333,9 @@ class FengchaoSignin(_PluginBase):
                 else:
                     logger.error(f"无法获取CSRF令牌 (使用{proxy_info})")
                     return None
-                    
+
             logger.info(f"获取到CSRF令牌: {csrf_token}")
-            
+
             # 获取session cookie
             session_cookie = None
             set_cookie_header = res.headers.get('set-cookie')
@@ -2222,16 +2351,16 @@ class FengchaoSignin(_PluginBase):
                 logger.error(f"响应中没有set-cookie头 (使用{proxy_info})")
                 logger.info(f"响应头: {dict(res.headers)}")
                 return None
-                
+
             # 第二步：POST请求登录
             logger.info(f"步骤2: POST请求登录 (使用{proxy_info})...")
-            
+
             login_data = {
                 "identification": self._username,
                 "password": self._password,
                 "remember": True
             }
-            
+
             login_headers = {
                 "Content-Type": "application/json",
                 "X-CSRF-Token": csrf_token,
@@ -2240,23 +2369,23 @@ class FengchaoSignin(_PluginBase):
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
                 "Cache-Control": "no-cache"
             }
-            
+
             logger.info(f"登录请求头: {login_headers}")
             logger.info(f"登录数据: {{'identification': '{self._username}', 'password': '******', 'remember': True}}")
-            
+
             try:
                 login_res = req.post_res(
                     url="https://pting.club/login",
                     json=login_data,
                     headers=login_headers
                 )
-                
+
                 if not login_res:
                     logger.error(f"登录请求失败，未收到响应 (使用{proxy_info})")
                     return None
-                    
+
                 logger.info(f"登录请求返回状态码: {login_res.status_code}")
-                
+
                 if login_res.status_code != 200:
                     logger.error(f"登录请求失败，状态码: {login_res.status_code} (使用{proxy_info})")
                     try:
@@ -2268,23 +2397,23 @@ class FengchaoSignin(_PluginBase):
             except Exception as e:
                 logger.error(f"登录请求异常 (使用{proxy_info}): {str(e)}")
                 return None
-                
+
             # 第三步：从登录响应中提取新cookie
             logger.info(f"步骤3: 提取登录成功后的cookie (使用{proxy_info})...")
-            
+
             cookie_dict = {}
-            
+
             # 检查set-cookie头
             set_cookie_header = login_res.headers.get('set-cookie')
             if set_cookie_header:
                 logger.info(f"登录响应包含set-cookie: {set_cookie_header[:100]}...")
-                
+
                 # 提取session cookie
                 session_match = re.search(r'flarum_session=([^;]+)', set_cookie_header)
                 if session_match:
                     cookie_dict['flarum_session'] = session_match.group(1)
                     logger.info(f"提取到新的session cookie: {session_match.group(1)[:10]}...")
-                
+
                 # 提取remember cookie
                 remember_match = re.search(r'flarum_remember=([^;]+)', set_cookie_header)
                 if remember_match:
@@ -2292,7 +2421,7 @@ class FengchaoSignin(_PluginBase):
                     logger.info(f"提取到remember cookie: {remember_match.group(1)[:10]}...")
             else:
                 logger.warning(f"登录响应中没有set-cookie头 (使用{proxy_info})")
-                
+
             # 如果无法从响应头获取，也可能登录请求的JSON响应中包含token
             try:
                 json_data = login_res.json()
@@ -2300,36 +2429,36 @@ class FengchaoSignin(_PluginBase):
                 # 有些API可能在响应中返回token
             except:
                 pass
-                
+
             # 如果没有提取到新cookie，使用原来的session cookie
             if 'flarum_session' not in cookie_dict:
                 logger.warning(f"未能提取到新的session cookie，使用原始session cookie (使用{proxy_info})")
                 cookie_dict['flarum_session'] = session_cookie
-                
+
             # 构建cookie字符串
             cookie_parts = []
             for key, value in cookie_dict.items():
                 cookie_parts.append(f"{key}={value}")
-                
+
             cookie_str = "; ".join(cookie_parts)
             logger.info(f"最终cookie字符串: {cookie_str[:50]}... (使用{proxy_info})")
-            
+
             # 调用现在更强大的验证方法
             return self._verify_cookie(req, cookie_str, proxy_info)
-                
+
         except Exception as e:
             logger.error(f"Postman方式登录失败 (使用{proxy_info if proxies else '直接连接'}): {str(e)}")
             import traceback
             logger.error(f"详细错误: {traceback.format_exc()}")
             return None
-            
+
     def _verify_cookie(self, req, cookie_str, proxy_info):
         """验证cookie是否有效（内置重试机制）"""
         if not cookie_str:
             return None
-                
+
         logger.info(f"验证cookie有效性 (使用{proxy_info})...")
-        
+
         headers = {
             "Cookie": cookie_str,
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
@@ -2345,28 +2474,29 @@ class FengchaoSignin(_PluginBase):
                     time.sleep(2)  # 在重试前等待2秒
 
                 verify_res = req.get_res("https://pting.club", headers=headers)
-                
+
                 if not verify_res or verify_res.status_code != 200:
-                    logger.warning(f"第{attempt + 1}次验证cookie失败，状态码: {verify_res.status_code if verify_res else '无响应'} (使用{proxy_info})")
+                    logger.warning(
+                        f"第{attempt + 1}次验证cookie失败，状态码: {verify_res.status_code if verify_res else '无响应'} (使用{proxy_info})")
                     continue  # 继续下一次尝试
-                    
+
                 # 验证是否已登录（检查页面是否包含用户ID）
                 pattern = r'"userId":(\d+)'
                 user_matches = re.search(pattern, verify_res.text)
                 if not user_matches:
                     logger.warning(f"第{attempt + 1}次验证cookie失败，未找到userId (使用{proxy_info})")
                     continue
-                    
+
                 user_id = user_matches.group(1)
                 if user_id == "0":
                     logger.warning(f"第{attempt + 1}次验证cookie失败，userId为0，表示未登录状态 (使用{proxy_info})")
                     continue
-                    
+
                 logger.info(f"登录成功！获取到有效cookie，用户ID: {user_id} (使用{proxy_info})")
                 return cookie_str
 
             except Exception as e:
                 logger.warning(f"第{attempt + 1}次验证cookie请求异常 (使用{proxy_info}): {str(e)}")
-        
+
         logger.error(f"所有 {max_verify_retries} 次cookie验证尝试均失败。")
         return None
