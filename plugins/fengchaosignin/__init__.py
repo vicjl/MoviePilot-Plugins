@@ -24,7 +24,7 @@ class FengchaoSignin(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/madrays/MoviePilot-Plugins/main/icons/fengchao.png"
     # 插件版本
-    plugin_version = "1.2.1"
+    plugin_version = "1.2.2"
     # 插件作者
     plugin_author = "madrays"
     # 作者主页
@@ -986,7 +986,7 @@ class FengchaoSignin(_PluginBase):
                     'component': 'div',
                     'props': {
                         'class': 'pa-2 ma-1 elevation-1',
-                        'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px;'
+                        'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; backdrop-filter: blur(8px);'
                     },
                     'content': [
                         {
@@ -1105,7 +1105,7 @@ class FengchaoSignin(_PluginBase):
                                                                 'component': 'div',
                                                                 'props': {
                                                                     'class': 'text-h6 mb-1 pa-1 d-inline-block elevation-1',
-                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px;'
+                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; backdrop-filter: blur(8px);'
                                                                 },
                                                                 'text': username
                                                             },
@@ -1118,6 +1118,7 @@ class FengchaoSignin(_PluginBase):
                                                                         'component': 'VChip',
                                                                         'props': {
                                                                             'style': f"background-color: {group.get('color', '#6B7CA8')}; color: white;",
+                                                                            'size': 'small',
                                                                             'class': 'mr-1 mb-1',
                                                                             'variant': 'elevated'
                                                                         },
@@ -1126,6 +1127,7 @@ class FengchaoSignin(_PluginBase):
                                                                                 'component': 'VIcon',
                                                                                 'props': {
                                                                                     'start': True,
+                                                                                    'size': 'small'
                                                                                 },
                                                                                 'text': group.get('icon')
                                                                             },
@@ -1154,7 +1156,7 @@ class FengchaoSignin(_PluginBase):
                                                                 'component': 'div',
                                                                 'props': {
                                                                     'class': 'pa-1 elevation-1 mb-1 ml-0',
-                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; width: fit-content;'
+                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; width: fit-content; backdrop-filter: blur(8px);'
                                                                 },
                                                                 'content': [
                                                                     {
@@ -1182,7 +1184,7 @@ class FengchaoSignin(_PluginBase):
                                                                 'component': 'div',
                                                                 'props': {
                                                                     'class': 'pa-1 elevation-1',
-                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; width: fit-content;'
+                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; width: fit-content; backdrop-filter: blur(8px);'
                                                                 },
                                                                 'content': [
                                                                     {
@@ -1235,7 +1237,7 @@ class FengchaoSignin(_PluginBase):
                                                                 'component': 'div',
                                                                 'props': {
                                                                     'class': 'text-center pa-1 elevation-1',
-                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px;'
+                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; backdrop-filter: blur(8px);'
                                                                 },
                                                                 'content': [
                                                                     {
@@ -1278,7 +1280,7 @@ class FengchaoSignin(_PluginBase):
                                                                 'component': 'div',
                                                                 'props': {
                                                                     'class': 'text-center pa-1 elevation-1',
-                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px;'
+                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; backdrop-filter: blur(8px);'
                                                                 },
                                                                 'content': [
                                                                     {
@@ -1321,7 +1323,7 @@ class FengchaoSignin(_PluginBase):
                                                                 'component': 'div',
                                                                 'props': {
                                                                     'class': 'text-center pa-1 elevation-1',
-                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px;'
+                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; backdrop-filter: blur(8px);'
                                                                 },
                                                                 'content': [
                                                                     {
@@ -1364,7 +1366,7 @@ class FengchaoSignin(_PluginBase):
                                                                 'component': 'div',
                                                                 'props': {
                                                                     'class': 'text-center pa-1 elevation-1',
-                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px;'
+                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; backdrop-filter: blur(8px);'
                                                                 },
                                                                 'content': [
                                                                     {
@@ -1407,7 +1409,7 @@ class FengchaoSignin(_PluginBase):
                                                                 'component': 'div',
                                                                 'props': {
                                                                     'class': 'text-center pa-1 elevation-1',
-                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px;'
+                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; backdrop-filter: blur(8px);'
                                                                 },
                                                                 'content': [
                                                                     {
@@ -1450,7 +1452,7 @@ class FengchaoSignin(_PluginBase):
                                                                 'component': 'div',
                                                                 'props': {
                                                                     'class': 'text-center pa-1 elevation-1',
-                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px;'
+                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; backdrop-filter: blur(8px);'
                                                                 },
                                                                 'content': [
                                                                     {
@@ -1496,7 +1498,7 @@ class FengchaoSignin(_PluginBase):
                                         'component': 'div',
                                         'props': {
                                             'class': 'd-flex align-center mb-2 elevation-1 d-inline-block ml-0',
-                                            'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 3px; width: fit-content; padding: 2px 8px 2px 5px;'
+                                            'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 3px; width: fit-content; padding: 2px 8px 2px 5px; backdrop-filter: blur(8px);'
                                         },
                                         'content': [
                                             {
@@ -1527,7 +1529,7 @@ class FengchaoSignin(_PluginBase):
                                 'component': 'div',
                                 'props': {
                                     'class': 'mt-3 text-caption text-right grey--text pa-1 elevation-1 d-inline-block float-right',
-                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px;'
+                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; backdrop-filter: blur(8px);'
                                 },
                                 'text': f'最后签到: {last_checkin_time}'
                             }
