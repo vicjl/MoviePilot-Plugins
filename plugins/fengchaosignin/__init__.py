@@ -919,9 +919,11 @@ class FengchaoSignin(_PluginBase):
         history = self.get_data('history') or []
         # 获取用户信息
         user_info = self.get_data('user_info')
-
-        # 如果有用户信息，构建用户信息卡
         user_info_card = None
+
+        # 定义样式，方便复用
+        frost_style = 'background-color: rgba(255, 255, 255, 0.75); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 8px;'
+        
         if user_info and 'data' in user_info and 'attributes' in user_info['data']:
             user_attrs = user_info['data']['attributes']
 
@@ -986,6 +988,8 @@ class FengchaoSignin(_PluginBase):
                     'category': category_info.get('name', '其他')
                 })
             
+            badge_count = len(badges)
+            
             # 将徽章按分类分组
             categorized_badges = defaultdict(list)
             for badge in badges:
@@ -994,567 +998,311 @@ class FengchaoSignin(_PluginBase):
             
             # 构建分类徽章组件
             badge_category_components = []
-            for category_name, badge_list in sorted(categorized_badges.items()):
+            if categorized_badges:
                 badge_category_components.append({
                     'component': 'div',
-                    'props': {
-                        'class': 'pa-2 ma-1 elevation-1',
-                        'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; backdrop-filter: blur(8px);'
-                    },
+                    'props': {'class': 'd-flex flex-wrap'},
                     'content': [
                         {
                             'component': 'div',
-                            'props': {'class': 'text-subtitle-2 font-weight-bold mb-2'},
-                            'text': category_name
-                        },
-                        {
-                            'component': 'div',
-                            'props': {'class': 'd-flex flex-wrap'},
+                            'props': {'class': 'ma-1 pa-2', 'style': f'{frost_style} border-radius: 12px;'},
                             'content': [
+                                {'component': 'div', 'props': {'class': 'text-subtitle-2 grey--text text--darken-1', 'style': 'text-align: center;'}, 'text': category_name},
+                                {'component': 'VDivider', 'props': {'class': 'my-1'}},
                                 {
                                     'component': 'div',
-                                    'props': {
-                                        'class': 'ma-1 pa-2 d-flex flex-column align-center',
-                                        'style': 'border-radius: 4px; width: 90px;',
-                                        'title': badge.get('description', '无描述')
-                                    },
+                                    'props': {'class': 'd-flex flex-wrap'},
                                     'content': [
-                                        {
-                                            'component': 'VImg' if badge.get('image') else 'VIcon',
-                                            'props': ({
-                                                'src': badge.get('image'),
-                                                'height': '50',
-                                                'width': '50',
-                                                'class': 'mb-2'
-                                            } if badge.get('image') else {
-                                                'icon': self._map_fa_to_mdi(badge.get('icon')),
-                                                'size': '50',
-                                                'class': 'mb-2'
-                                            })
-                                        },
                                         {
                                             'component': 'div',
                                             'props': {
-                                                'class': 'text-caption text-center',
-                                                'style': 'white-space: normal; line-height: 1.2; font-weight: 500;'
+                                                'class': 'ma-1 pa-1 d-flex flex-column align-center',
+                                                'style': 'width: 80px; text-align: center;',
+                                                'title': badge.get('description', '无描述')
                                             },
-                                            'text': badge.get('name', '未知徽章')
-                                        }
+                                            'content': [
+                                                {
+                                                    'component': 'VImg' if badge.get('image') else 'VIcon',
+                                                    'props': ({
+                                                        'src': badge.get('image'),
+                                                        'height': '32',
+                                                        'width': '32',
+                                                        'class': 'mb-1'
+                                                    } if badge.get('image') else {
+                                                        'icon': self._map_fa_to_mdi(badge.get('icon')),
+                                                        'size': '32',
+                                                        'class': 'mb-1'
+                                                    })
+                                                },
+                                                {
+                                                    'component': 'div',
+                                                    'props': {
+                                                        'class': 'text-caption',
+                                                        'style': 'white-space: normal; line-height: 1.2; font-weight: 500; text-align: center;'
+                                                    },
+                                                    'text': badge.get('name', '未知徽章')
+                                                }
+                                            ]
+                                        } for badge in badge_list
                                     ]
-                                } for badge in badge_list
+                                }
                             ]
-                        }
+                        } for category_name, badge_list in sorted(categorized_badges.items())
                     ]
                 })
 
-            # 用户信息卡
             user_info_card = {
                 'component': 'VCard',
-                'props': {
-                    'variant': 'outlined',
-                    'class': 'mb-4',
-                    'style': f"background-image: url('{background_image}'); background-size: cover; background-position: center;" if background_image else ''
-                },
+                'props': {'variant': 'outlined', 'class': 'mb-4',
+                          'style': f"background-image: url('{background_image}'); background-size: cover; background-position: center;" if background_image else ''},
                 'content': [
+                    {'component': 'VCardTitle', 'props': {'class': 'd-flex align-center'},
+                     'content': [{'component': 'VSpacer'}]},
+                    {'component': 'VDivider'},
                     {
                         'component': 'VCardText',
                         'content': [
-                            # 用户基本信息部分
                             {
-                                'component': 'VRow',
-                                'props': {'class': 'ma-1'},
+                                'component': 'VRow', 'props': {'class': 'ma-1'},
                                 'content': [
-                                    # 左侧头像和用户名
                                     {
-                                        'component': 'VCol',
-                                        'props': {
-                                            'cols': 12,
-                                            'md': 5
-                                        },
+                                        'component': 'VCol', 'props': {'cols': 12, 'md': 5},
                                         'content': [
                                             {
-                                                'component': 'div',
-                                                'props': {'class': 'd-flex align-center'},
+                                                'component': 'div', 'props': {'class': 'd-flex align-center'},
                                                 'content': [
-                                                    # 头像和头像框
                                                     {
                                                         'component': 'div',
-                                                        'props': {
-                                                            'class': 'mr-3',
-                                                            'style': 'position: relative; width: 90px; height: 90px;'
-                                                        },
+                                                        'props': {'class': 'mr-3',
+                                                                  'style': 'position: relative; width: 90px; height: 90px;'},
                                                         'content': [
-                                                            {
-                                                                'component': 'VAvatar',
-                                                                'props': {
-                                                                    'size': 60,
-                                                                    'rounded': 'circle',
-                                                                    'style': 'position: absolute; top: 15px; left: 15px; z-index: 1;'
-                                                                },
-                                                                'content': [
-                                                                    {
-                                                                        'component': 'VImg',
-                                                                        'props': {
-                                                                            'src': avatar_url,
-                                                                            'alt': username
-                                                                        }
-                                                                    }
-                                                                ]
-                                                            },
-                                                            # 头像框
-                                                            {
-                                                                'component': 'div',
-                                                                'props': {
-                                                                    'style': f"position: absolute; top: 0; left: 0; width: 90px; height: 90px; background-image: url('{user_attrs.get('decorationAvatarFrame', '')}'); background-size: contain; background-repeat: no-repeat; background-position: center; z-index: 2;"
-                                                                }
-                                                            } if user_attrs.get('decorationAvatarFrame') else {}
+                                                            {'component': 'VAvatar', 'props': {'size': 60,
+                                                                                               'rounded': 'circle',
+                                                                                               'style': 'position: absolute; top: 15px; left: 15px; z-index: 1;'},
+                                                             'content': [{'component': 'VImg', 'props': {
+                                                                 'src': avatar_url, 'alt': username}}]},
+                                                            {'component': 'div', 'props': {
+                                                                'style': f"position: absolute; top: 0; left: 0; width: 90px; height: 90px; background-image: url('{user_attrs.get('decorationAvatarFrame', '')}'); background-size: contain; background-repeat: no-repeat; background-position: center; z-index: 2;"}} if user_attrs.get(
+                                                                'decorationAvatarFrame') else {}
                                                         ]
                                                     },
-                                                    # 用户名和身份组
                                                     {
                                                         'component': 'div',
                                                         'content': [
-                                                            {
-                                                                'component': 'div',
-                                                                'props': {
-                                                                    'class': 'text-h6 mb-1 pa-1 d-inline-block elevation-1',
-                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; backdrop-filter: blur(8px);'
-                                                                },
-                                                                'text': username
-                                                            },
-                                                            # 用户组标签
-                                                            {
-                                                                'component': 'div',
-                                                                'props': {'class': 'd-flex flex-wrap mt-1'},
-                                                                'content': [
-                                                                    {
-                                                                        'component': 'VChip',
-                                                                        'props': {
-                                                                            'style': f"background-color: {group.get('color', '#6B7CA8')}; color: white; height: 28px; font-size: 13px;",
-                                                                            'class': 'mr-1 mb-1',
-                                                                            'variant': 'elevated'
+                                                            {'component': 'div', 'props': {
+                                                                'class': 'text-h6 mb-1 pa-2 d-inline-block elevation-2',
+                                                                'style': frost_style},
+                                                             'text': username},
+                                                            {'component': 'div',
+                                                             'props': {'class': 'd-flex flex-wrap mt-1'},
+                                                             'content': [
+                                                                 {'component': 'VChip', 'props': {
+                                                                     'style': f"background-color: {group.get('color', '#6B7CA8')}; color: white;",
+                                                                     'size': 'small', 'class': 'mr-1 mb-1',
+                                                                     'variant': 'elevated'}, 
+                                                                  'content': [
+                                                                        {
+                                                                            'component': 'VIcon',
+                                                                            'props': {'start': True, 'size': 'small'},
+                                                                            'text': group.get('icon')
                                                                         },
-                                                                        'content': [
-                                                                            {
-                                                                                'component': 'VIcon',
-                                                                                'props': {
-                                                                                    'start': True,
-                                                                                    'size': 'small'
-                                                                                },
-                                                                                'text': group.get('icon')
-                                                                            },
-                                                                            {
-                                                                                'component': 'span',
-                                                                                'text': group.get('name')
-                                                                            }
-                                                                        ]
-                                                                    } for group in groups
-                                                                ]
-                                                            }
+                                                                        {'component': 'span', 'text': group.get('name')}
+                                                                  ]} for group in groups
+                                                             ]}
                                                         ]
                                                     }
                                                 ]
                                             },
-                                            # 注册、访问时间、徽章数
                                             {
-                                                'component': 'VRow',
-                                                'props': {'class': 'mt-2'},
+                                                'component': 'VRow', 'props': {'class': 'mt-2'},
                                                 'content': [
                                                     {
-                                                        'component': 'VCol',
-                                                        'props': {'cols': 12},
+                                                        'component': 'VCol', 'props': {'cols': 12},
                                                         'content': [
-                                                            {
-                                                                'component': 'div',
-                                                                'props': {
-                                                                    'class': 'pa-1 elevation-1 mb-1 ml-0',
-                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; width: fit-content; backdrop-filter: blur(8px);'
-                                                                },
-                                                                'content': [
-                                                                    {
-                                                                        'component': 'div',
-                                                                        'props': {'class': 'd-flex align-center text-caption'},
-                                                                        'content': [
-                                                                            {
-                                                                                'component': 'VIcon',
-                                                                                'props': {
-                                                                                    'style': 'color: #4CAF50;',
-                                                                                    'size': 'x-small',
-                                                                                    'class': 'mr-1'
-                                                                                },
-                                                                                'text': 'mdi-calendar'
-                                                                            },
-                                                                            {
-                                                                                'component': 'span',
-                                                                                'text': f'注册于 {join_time}'
-                                                                            }
-                                                                        ]
-                                                                    }
-                                                                ]
-                                                            },
-                                                            {
-                                                                'component': 'div',
-                                                                'props': {
-                                                                    'class': 'pa-1 elevation-1 mb-1 ml-0',
-                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; width: fit-content; backdrop-filter: blur(8px);'
-                                                                },
-                                                                'content': [
-                                                                    {
-                                                                        'component': 'div',
-                                                                        'props': {'class': 'd-flex align-center text-caption'},
-                                                                        'content': [
-                                                                            {
-                                                                                'component': 'VIcon',
-                                                                                'props': {
-                                                                                    'style': 'color: #2196F3;',
-                                                                                    'size': 'x-small',
-                                                                                    'class': 'mr-1'
-                                                                                },
-                                                                                'text': 'mdi-clock-outline'
-                                                                            },
-                                                                            {
-                                                                                'component': 'span',
-                                                                                'text': f'最后访问 {last_seen_at}'
-                                                                            }
-                                                                        ]
-                                                                    }
-                                                                ]
-                                                            },
-                                                            {
-                                                                'component': 'div',
-                                                                'props': {
-                                                                    'class': 'pa-1 elevation-1 ml-0',
-                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; width: fit-content; backdrop-filter: blur(8px);'
-                                                                },
-                                                                'content': [
-                                                                    {
-                                                                        'component': 'div',
-                                                                        'props': {'class': 'd-flex align-center text-caption'},
-                                                                        'content': [
-                                                                            {
-                                                                                'component': 'VIcon',
-                                                                                'props': {
-                                                                                    'style': 'color: #FFA000;',
-                                                                                    'size': 'x-small',
-                                                                                    'class': 'mr-1'
-                                                                                },
-                                                                                'text': 'mdi-medal'
-                                                                            },
-                                                                            {
-                                                                                'component': 'span',
-                                                                                'text': f'拥有 {len(badges)} 枚徽章'
-                                                                            }
-                                                                        ]
-                                                                    }
-                                                                ]
-                                                            }
+                                                            {'component': 'div', 'props': {
+                                                                'class': 'pa-1 elevation-2 mb-1',
+                                                                'style': f'{frost_style} width: fit-content;'},
+                                                             'content': [{'component': 'div', 'props': {
+                                                                 'class': 'd-flex align-center text-caption'},
+                                                                          'content': [
+                                                                              {'component': 'VIcon', 'props': {
+                                                                                  'style': 'color: #4CAF50;',
+                                                                                  'size': 'x-small',
+                                                                                  'class': 'mr-1'},
+                                                                               'text': 'mdi-calendar'},
+                                                                              {'component': 'span',
+                                                                               'text': f'注册于 {join_time}'}]}]},
+                                                            {'component': 'div', 'props': {
+                                                                'class': 'pa-1 elevation-2 mb-1',
+                                                                'style': f'{frost_style} width: fit-content;'},
+                                                             'content': [{'component': 'div', 'props': {
+                                                                 'class': 'd-flex align-center text-caption'},
+                                                                          'content': [
+                                                                              {'component': 'VIcon', 'props': {
+                                                                                  'style': 'color: #2196F3;',
+                                                                                  'size': 'x-small',
+                                                                                  'class': 'mr-1'},
+                                                                               'text': 'mdi-clock-outline'},
+                                                                              {'component': 'span',
+                                                                               'text': f'最后访问 {last_seen_at}'}]}]},
+                                                            {'component': 'div', 'props': {
+                                                                'class': 'pa-1 elevation-2',
+                                                                'style': f'{frost_style} width: fit-content;'},
+                                                             'content': [{'component': 'div', 'props': {
+                                                                 'class': 'd-flex align-center text-caption'},
+                                                                          'content': [
+                                                                              {'component': 'VIcon', 'props': {
+                                                                                  'style': 'color: #E64A19;',
+                                                                                  'size': 'x-small',
+                                                                                  'class': 'mr-1'},
+                                                                               'text': 'mdi-medal-outline'},
+                                                                              {'component': 'span',
+                                                                               'text': f'拥有 {badge_count} 枚徽章'}]}]}
                                                         ]
                                                     }
                                                 ]
                                             }
                                         ]
                                     },
-                                    # 右侧统计数据
                                     {
-                                        'component': 'VCol',
-                                        'props': {
-                                            'cols': 12,
-                                            'md': 7
-                                        },
+                                        'component': 'VCol', 'props': {'cols': 12, 'md': 7},
                                         'content': [
                                             {
                                                 'component': 'VRow',
                                                 'content': [
-                                                    # 花粉数量
-                                                    {
-                                                        'component': 'VCol',
-                                                        'props': {
-                                                            'cols': 6,
-                                                            'md': 4
-                                                        },
-                                                        'content': [
-                                                            {
-                                                                'component': 'div',
-                                                                'props': {
-                                                                    'class': 'text-center pa-2 elevation-1',
-                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; backdrop-filter: blur(8px);'
-                                                                },
-                                                                'content': [
-                                                                    {
-                                                                        'component': 'div',
-                                                                        'props': {'class': 'd-flex justify-center align-center'},
-                                                                        'content': [
-                                                                            {
-                                                                                'component': 'VIcon',
-                                                                                'props': {
-                                                                                    'style': 'color: #FFC107;',
-                                                                                    'class': 'mr-1'
-                                                                                },
-                                                                                'text': 'mdi-flower'
-                                                                            },
-                                                                            {
-                                                                                'component': 'span',
-                                                                                'props': {'class': 'text-h6'},
-                                                                                'text': money
-                                                                            }
-                                                                        ]
-                                                                    },
-                                                                    {
-                                                                        'component': 'div',
-                                                                        'props': {'class': 'text-caption mt-1'},
-                                                                        'text': '花粉'
-                                                                    }
-                                                                ]
-                                                            }
-                                                        ]
-                                                    },
-                                                    # 发帖数
-                                                    {
-                                                        'component': 'VCol',
-                                                        'props': {
-                                                            'cols': 6,
-                                                            'md': 4
-                                                        },
-                                                        'content': [
-                                                            {
-                                                                'component': 'div',
-                                                                'props': {
-                                                                    'class': 'text-center pa-2 elevation-1',
-                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; backdrop-filter: blur(8px);'
-                                                                },
-                                                                'content': [
-                                                                    {
-                                                                        'component': 'div',
-                                                                        'props': {'class': 'd-flex justify-center align-center'},
-                                                                        'content': [
-                                                                            {
-                                                                                'component': 'VIcon',
-                                                                                'props': {
-                                                                                    'style': 'color: #3F51B5;',
-                                                                                    'class': 'mr-1'
-                                                                                },
-                                                                                'text': 'mdi-forum'
-                                                                            },
-                                                                            {
-                                                                                'component': 'span',
-                                                                                'props': {'class': 'text-h6'},
-                                                                                'text': str(discussion_count)
-                                                                            }
-                                                                        ]
-                                                                    },
-                                                                    {
-                                                                        'component': 'div',
-                                                                        'props': {'class': 'text-caption mt-1'},
-                                                                        'text': '主题'
-                                                                    }
-                                                                ]
-                                                            }
-                                                        ]
-                                                    },
-                                                    # 评论数
-                                                    {
-                                                        'component': 'VCol',
-                                                        'props': {
-                                                            'cols': 6,
-                                                            'md': 4
-                                                        },
-                                                        'content': [
-                                                            {
-                                                                'component': 'div',
-                                                                'props': {
-                                                                    'class': 'text-center pa-2 elevation-1',
-                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; backdrop-filter: blur(8px);'
-                                                                },
-                                                                'content': [
-                                                                    {
-                                                                        'component': 'div',
-                                                                        'props': {'class': 'd-flex justify-center align-center'},
-                                                                        'content': [
-                                                                            {
-                                                                                'component': 'VIcon',
-                                                                                'props': {
-                                                                                    'style': 'color: #00BCD4;',
-                                                                                    'class': 'mr-1'
-                                                                                },
-                                                                                'text': 'mdi-comment-text-multiple'
-                                                                            },
-                                                                            {
-                                                                                'component': 'span',
-                                                                                'props': {'class': 'text-h6'},
-                                                                                'text': str(comment_count)
-                                                                            }
-                                                                        ]
-                                                                    },
-                                                                    {
-                                                                        'component': 'div',
-                                                                        'props': {'class': 'text-caption mt-1'},
-                                                                        'text': '评论'
-                                                                    }
-                                                                ]
-                                                            }
-                                                        ]
-                                                    },
-                                                    # 粉丝数
-                                                    {
-                                                        'component': 'VCol',
-                                                        'props': {
-                                                            'cols': 6,
-                                                            'md': 4
-                                                        },
-                                                        'content': [
-                                                            {
-                                                                'component': 'div',
-                                                                'props': {
-                                                                    'class': 'text-center pa-2 elevation-1',
-                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; backdrop-filter: blur(8px);'
-                                                                },
-                                                                'content': [
-                                                                    {
-                                                                        'component': 'div',
-                                                                        'props': {'class': 'd-flex justify-center align-center'},
-                                                                        'content': [
-                                                                            {
-                                                                                'component': 'VIcon',
-                                                                                'props': {
-                                                                                    'style': 'color: #673AB7;',
-                                                                                    'class': 'mr-1'
-                                                                                },
-                                                                                'text': 'mdi-account-group'
-                                                                            },
-                                                                            {
-                                                                                'component': 'span',
-                                                                                'props': {'class': 'text-h6'},
-                                                                                'text': str(follower_count)
-                                                                            }
-                                                                        ]
-                                                                    },
-                                                                    {
-                                                                        'component': 'div',
-                                                                        'props': {'class': 'text-caption mt-1'},
-                                                                        'text': '粉丝'
-                                                                    }
-                                                                ]
-                                                            }
-                                                        ]
-                                                    },
-                                                    # 关注数
-                                                    {
-                                                        'component': 'VCol',
-                                                        'props': {
-                                                            'cols': 6,
-                                                            'md': 4
-                                                        },
-                                                        'content': [
-                                                            {
-                                                                'component': 'div',
-                                                                'props': {
-                                                                    'class': 'text-center pa-2 elevation-1',
-                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; backdrop-filter: blur(8px);'
-                                                                },
-                                                                'content': [
-                                                                    {
-                                                                        'component': 'div',
-                                                                        'props': {'class': 'd-flex justify-center align-center'},
-                                                                        'content': [
-                                                                            {
-                                                                                'component': 'VIcon',
-                                                                                'props': {
-                                                                                    'style': 'color: #03A9F4;',
-                                                                                    'class': 'mr-1'
-                                                                                },
-                                                                                'text': 'mdi-account-multiple-plus'
-                                                                            },
-                                                                            {
-                                                                                'component': 'span',
-                                                                                'props': {'class': 'text-h6'},
-                                                                                'text': str(following_count)
-                                                                            }
-                                                                        ]
-                                                                    },
-                                                                    {
-                                                                        'component': 'div',
-                                                                        'props': {'class': 'text-caption mt-1'},
-                                                                        'text': '关注'
-                                                                    }
-                                                                ]
-                                                            }
-                                                        ]
-                                                    },
-                                                    # 连续签到
-                                                    {
-                                                        'component': 'VCol',
-                                                        'props': {
-                                                            'cols': 6,
-                                                            'md': 4
-                                                        },
-                                                        'content': [
-                                                            {
-                                                                'component': 'div',
-                                                                'props': {
-                                                                    'class': 'text-center pa-2 elevation-1',
-                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; backdrop-filter: blur(8px);'
-                                                                },
-                                                                'content': [
-                                                                    {
-                                                                        'component': 'div',
-                                                                        'props': {'class': 'd-flex justify-center align-center'},
-                                                                        'content': [
-                                                                            {
-                                                                                'component': 'VIcon',
-                                                                                'props': {
-                                                                                    'style': 'color: #009688;',
-                                                                                    'class': 'mr-1'
-                                                                                },
-                                                                                'text': 'mdi-calendar-check'
-                                                                            },
-                                                                            {
-                                                                                'component': 'span',
-                                                                                'props': {'class': 'text-h6'},
-                                                                                'text': str(total_continuous_checkin)
-                                                                            }
-                                                                        ]
-                                                                    },
-                                                                    {
-                                                                        'component': 'div',
-                                                                        'props': {'class': 'text-caption mt-1'},
-                                                                        'text': '连续签到'
-                                                                    }
-                                                                ]
-                                                            }
-                                                        ]
-                                                    }
+                                                    {'component': 'VCol', 'props': {'cols': 6, 'sm': 4},
+                                                     'content': [
+                                                         {'component': 'div', 'props': {
+                                                             'class': 'text-center pa-2 elevation-2',
+                                                             'style': frost_style},
+                                                          'content': [{'component': 'div', 'props': {
+                                                              'class': 'd-flex justify-center align-center'},
+                                                                      'content': [
+                                                                          {'component': 'VIcon', 'props': {
+                                                                              'style': 'color: #FFC107;',
+                                                                              'class': 'mr-1'},
+                                                                           'text': 'mdi-flower'},
+                                                                          {'component': 'span', 'props': {
+                                                                              'class': 'text-h6'},
+                                                                           'text': str(money)}]},
+                                                                     {'component': 'div',
+                                                                      'props': {
+                                                                          'class': 'text-caption mt-1'},
+                                                                      'text': '花粉'}]}]},
+                                                    {'component': 'VCol', 'props': {'cols': 6, 'sm': 4},
+                                                     'content': [
+                                                         {'component': 'div', 'props': {
+                                                             'class': 'text-center pa-2 elevation-2',
+                                                             'style': frost_style},
+                                                          'content': [{'component': 'div', 'props': {
+                                                              'class': 'd-flex justify-center align-center'},
+                                                                      'content': [
+                                                                          {'component': 'VIcon', 'props': {
+                                                                              'style': 'color: #3F51B5;',
+                                                                              'class': 'mr-1'},
+                                                                           'text': 'mdi-forum'},
+                                                                          {'component': 'span', 'props': {
+                                                                              'class': 'text-h6'},
+                                                                           'text': str(discussion_count)}]},
+                                                                     {'component': 'div',
+                                                                      'props': {
+                                                                          'class': 'text-caption mt-1'},
+                                                                      'text': '主题'}]}]},
+                                                    {'component': 'VCol', 'props': {'cols': 6, 'sm': 4},
+                                                     'content': [
+                                                         {'component': 'div', 'props': {
+                                                             'class': 'text-center pa-2 elevation-2',
+                                                             'style': frost_style},
+                                                          'content': [{'component': 'div', 'props': {
+                                                              'class': 'd-flex justify-center align-center'},
+                                                                      'content': [
+                                                                          {'component': 'VIcon', 'props': {
+                                                                              'style': 'color: #00BCD4;',
+                                                                              'class': 'mr-1'},
+                                                                           'text': 'mdi-comment-text-multiple'},
+                                                                          {'component': 'span', 'props': {
+                                                                              'class': 'text-h6'},
+                                                                           'text': str(comment_count)}]},
+                                                                     {'component': 'div',
+                                                                      'props': {
+                                                                          'class': 'text-caption mt-1'},
+                                                                      'text': '评论'}]}]},
+                                                    {'component': 'VCol', 'props': {'cols': 6, 'sm': 4},
+                                                     'content': [
+                                                         {'component': 'div', 'props': {
+                                                             'class': 'text-center pa-2 elevation-2',
+                                                             'style': frost_style},
+                                                          'content': [{'component': 'div', 'props': {
+                                                              'class': 'd-flex justify-center align-center'},
+                                                                      'content': [
+                                                                          {'component': 'VIcon', 'props': {
+                                                                              'style': 'color: #673AB7;',
+                                                                              'class': 'mr-1'},
+                                                                           'text': 'mdi-account-group'},
+                                                                          {'component': 'span', 'props': {
+                                                                              'class': 'text-h6'},
+                                                                           'text': str(follower_count)}]},
+                                                                     {'component': 'div',
+                                                                      'props': {
+                                                                          'class': 'text-caption mt-1'},
+                                                                      'text': '粉丝'}]}]},
+                                                    {'component': 'VCol', 'props': {'cols': 6, 'sm': 4},
+                                                     'content': [
+                                                         {'component': 'div', 'props': {
+                                                             'class': 'text-center pa-2 elevation-2',
+                                                             'style': frost_style},
+                                                          'content': [{'component': 'div', 'props': {
+                                                              'class': 'd-flex justify-center align-center'},
+                                                                      'content': [
+                                                                          {'component': 'VIcon', 'props': {
+                                                                              'style': 'color: #03A9F4;',
+                                                                              'class': 'mr-1'},
+                                                                           'text': 'mdi-account-multiple-plus'},
+                                                                          {'component': 'span', 'props': {
+                                                                              'class': 'text-h6'},
+                                                                           'text': str(following_count)}]},
+                                                                     {'component': 'div',
+                                                                      'props': {
+                                                                          'class': 'text-caption mt-1'},
+                                                                      'text': '关注'}]}]},
+                                                    {'component': 'VCol', 'props': {'cols': 12, 'sm': 4},
+                                                     'content': [
+                                                         {'component': 'div', 'props': {
+                                                             'class': 'text-center pa-2 elevation-2',
+                                                             'style': frost_style},
+                                                          'content': [{'component': 'div', 'props': {
+                                                              'class': 'd-flex justify-center align-center'},
+                                                                      'content': [
+                                                                          {'component': 'VIcon', 'props': {
+                                                                              'style': 'color: #009688;',
+                                                                              'class': 'mr-1'},
+                                                                           'text': 'mdi-calendar-check'},
+                                                                          {'component': 'span', 'props': {
+                                                                              'class': 'text-h6'},
+                                                                           'text': str(
+                                                                               total_continuous_checkin)}]},
+                                                                     {'component': 'div',
+                                                                      'props': {
+                                                                          'class': 'text-caption mt-1'},
+                                                                      'text': '连续签到'}]}]}
                                                 ]
                                             }
                                         ]
                                     }
                                 ]
                             },
-                            # 徽章部分
-                            {
-                                'component': 'div',
-                                'props': {'class': 'mb-1 mt-3 pl-0'},
-                                'content': [
-                                    {
-                                        'component': 'div',
-                                        'props': {'class': 'd-flex flex-wrap'},
-                                        'content': badge_category_components
-                                    }
-                                ]
-                            },
+                            # 徽章分类显示区域
+                            *badge_category_components,
                             # 最后签到时间
-                            {
-                                'component': 'div',
-                                'props': {
-                                    'class': 'mt-3 text-caption text-right grey--text pa-1 elevation-1 d-inline-block float-right',
-                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; backdrop-filter: blur(8px);'
-                                },
-                                'text': f'最后签到: {last_checkin_time}'
-                            }
+                            {'component': 'div', 'props': {
+                                'class': 'mt-2 text-caption text-right pa-1 elevation-2 d-inline-block float-right',
+                                'style': frost_style},
+                             'text': f'最后签到: {last_checkin_time}'}
                         ]
                     }
                 ]
             }
-        
+
         # 如果没有历史记录
         if not history:
             components = []
