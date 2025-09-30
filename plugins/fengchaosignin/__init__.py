@@ -24,7 +24,7 @@ class FengchaoSignin(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/madrays/MoviePilot-Plugins/main/icons/fengchao.png"
     # 插件版本
-    plugin_version = "1.2.2"
+    plugin_version = "1.2.3"
     # 插件作者
     plugin_author = "madrays"
     # 作者主页
@@ -894,6 +894,23 @@ class FengchaoSignin(_PluginBase):
         
         return 'mdi-account-group'
 
+    def _format_pollen(self, value: Any) -> str:
+        """
+        Formats the pollen value to show integers without decimals, and floats with up to 3 decimal places.
+        """
+        if value is None:
+            return '—'
+        try:
+            num = float(value)
+            # Check if the number has no fractional part
+            if num == int(num):
+                return str(int(num))
+            else:
+                # Format to remove trailing zeros, round to max 3 places to handle precision errors
+                return f'{round(num, 3):g}'
+        except (ValueError, TypeError):
+            return str(value)
+
     def get_page(self) -> List[dict]:
         """
         构建插件详情页面，展示签到历史
@@ -913,11 +930,7 @@ class FengchaoSignin(_PluginBase):
             avatar_url = user_attrs.get('avatarUrl', '')
             
             # 格式化花粉
-            money_val = user_attrs.get('money', 0)
-            try:
-                money = f"{float(money_val):.3f}"
-            except (ValueError, TypeError):
-                money = str(money_val)
+            money = self._format_pollen(user_attrs.get('money', 0))
 
             discussion_count = user_attrs.get('discussionCount', 0)
             comment_count = user_attrs.get('commentCount', 0)
@@ -986,7 +999,7 @@ class FengchaoSignin(_PluginBase):
                     'component': 'div',
                     'props': {
                         'class': 'pa-2 ma-1 elevation-1',
-                        'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; backdrop-filter: blur(8px);'
+                        'style': 'background-color: rgba(255, 255, 255, 0.4); border-radius: 4px; backdrop-filter: blur(8px);'
                     },
                     'content': [
                         {
@@ -1105,7 +1118,7 @@ class FengchaoSignin(_PluginBase):
                                                                 'component': 'div',
                                                                 'props': {
                                                                     'class': 'text-h6 mb-1 pa-1 d-inline-block elevation-1',
-                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; backdrop-filter: blur(8px);'
+                                                                    'style': 'background-color: rgba(255, 255, 255, 0.4); border-radius: 4px; backdrop-filter: blur(8px);'
                                                                 },
                                                                 'text': username
                                                             },
@@ -1117,8 +1130,7 @@ class FengchaoSignin(_PluginBase):
                                                                     {
                                                                         'component': 'VChip',
                                                                         'props': {
-                                                                            'style': f"background-color: {group.get('color', '#6B7CA8')}; color: white;",
-                                                                            'size': 'small',
+                                                                            'style': f"background-color: {group.get('color', '#6B7CA8')}; color: white; height: 28px; font-size: 13px;",
                                                                             'class': 'mr-1 mb-1',
                                                                             'variant': 'elevated'
                                                                         },
@@ -1156,7 +1168,7 @@ class FengchaoSignin(_PluginBase):
                                                                 'component': 'div',
                                                                 'props': {
                                                                     'class': 'pa-1 elevation-1 mb-1 ml-0',
-                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; width: fit-content; backdrop-filter: blur(8px);'
+                                                                    'style': 'background-color: rgba(255, 255, 255, 0.4); border-radius: 4px; width: fit-content; backdrop-filter: blur(8px);'
                                                                 },
                                                                 'content': [
                                                                     {
@@ -1184,7 +1196,7 @@ class FengchaoSignin(_PluginBase):
                                                                 'component': 'div',
                                                                 'props': {
                                                                     'class': 'pa-1 elevation-1',
-                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; width: fit-content; backdrop-filter: blur(8px);'
+                                                                    'style': 'background-color: rgba(255, 255, 255, 0.4); border-radius: 4px; width: fit-content; backdrop-filter: blur(8px);'
                                                                 },
                                                                 'content': [
                                                                     {
@@ -1237,7 +1249,7 @@ class FengchaoSignin(_PluginBase):
                                                                 'component': 'div',
                                                                 'props': {
                                                                     'class': 'text-center pa-1 elevation-1',
-                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; backdrop-filter: blur(8px);'
+                                                                    'style': 'background-color: rgba(255, 255, 255, 0.4); border-radius: 4px; backdrop-filter: blur(8px);'
                                                                 },
                                                                 'content': [
                                                                     {
@@ -1280,7 +1292,7 @@ class FengchaoSignin(_PluginBase):
                                                                 'component': 'div',
                                                                 'props': {
                                                                     'class': 'text-center pa-1 elevation-1',
-                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; backdrop-filter: blur(8px);'
+                                                                    'style': 'background-color: rgba(255, 255, 255, 0.4); border-radius: 4px; backdrop-filter: blur(8px);'
                                                                 },
                                                                 'content': [
                                                                     {
@@ -1323,7 +1335,7 @@ class FengchaoSignin(_PluginBase):
                                                                 'component': 'div',
                                                                 'props': {
                                                                     'class': 'text-center pa-1 elevation-1',
-                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; backdrop-filter: blur(8px);'
+                                                                    'style': 'background-color: rgba(255, 255, 255, 0.4); border-radius: 4px; backdrop-filter: blur(8px);'
                                                                 },
                                                                 'content': [
                                                                     {
@@ -1366,7 +1378,7 @@ class FengchaoSignin(_PluginBase):
                                                                 'component': 'div',
                                                                 'props': {
                                                                     'class': 'text-center pa-1 elevation-1',
-                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; backdrop-filter: blur(8px);'
+                                                                    'style': 'background-color: rgba(255, 255, 255, 0.4); border-radius: 4px; backdrop-filter: blur(8px);'
                                                                 },
                                                                 'content': [
                                                                     {
@@ -1409,7 +1421,7 @@ class FengchaoSignin(_PluginBase):
                                                                 'component': 'div',
                                                                 'props': {
                                                                     'class': 'text-center pa-1 elevation-1',
-                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; backdrop-filter: blur(8px);'
+                                                                    'style': 'background-color: rgba(255, 255, 255, 0.4); border-radius: 4px; backdrop-filter: blur(8px);'
                                                                 },
                                                                 'content': [
                                                                     {
@@ -1452,7 +1464,7 @@ class FengchaoSignin(_PluginBase):
                                                                 'component': 'div',
                                                                 'props': {
                                                                     'class': 'text-center pa-1 elevation-1',
-                                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; backdrop-filter: blur(8px);'
+                                                                    'style': 'background-color: rgba(255, 255, 255, 0.4); border-radius: 4px; backdrop-filter: blur(8px);'
                                                                 },
                                                                 'content': [
                                                                     {
@@ -1498,7 +1510,7 @@ class FengchaoSignin(_PluginBase):
                                         'component': 'div',
                                         'props': {
                                             'class': 'd-flex align-center mb-2 elevation-1 d-inline-block ml-0',
-                                            'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 3px; width: fit-content; padding: 2px 8px 2px 5px; backdrop-filter: blur(8px);'
+                                            'style': 'background-color: rgba(255, 255, 255, 0.4); border-radius: 3px; width: fit-content; padding: 2px 8px 2px 5px; backdrop-filter: blur(8px);'
                                         },
                                         'content': [
                                             {
@@ -1529,7 +1541,7 @@ class FengchaoSignin(_PluginBase):
                                 'component': 'div',
                                 'props': {
                                     'class': 'mt-3 text-caption text-right grey--text pa-1 elevation-1 d-inline-block float-right',
-                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; backdrop-filter: blur(8px);'
+                                    'style': 'background-color: rgba(255, 255, 255, 0.4); border-radius: 4px; backdrop-filter: blur(8px);'
                                 },
                                 'text': f'最后签到: {last_checkin_time}'
                             }
@@ -1647,13 +1659,7 @@ class FengchaoSignin(_PluginBase):
                 status_icon = "mdi-close-circle"
             
             # 格式化花粉
-            money_val = record.get('money')
-            money_text = '—'
-            if money_val is not None:
-                try:
-                    money_text = f"{float(money_val):.3f}"
-                except (ValueError, TypeError):
-                    money_text = str(money_val)
+            money_text = self._format_pollen(record.get('money'))
 
             history_rows.append({
                 'component': 'tr',
@@ -1778,7 +1784,7 @@ class FengchaoSignin(_PluginBase):
                                     },
                                     {
                                         'component': 'span',
-                                        'text': f"{record.get('lastCheckinMoney', 0)}花粉" if ("签到成功" in status_text or "已签到" in status_text) and record.get('lastCheckinMoney', 0) > 0 else '—'
+                                        'text': f"{self._format_pollen(record.get('lastCheckinMoney', 0))}花粉" if ("签到成功" in status_text or "已签到" in status_text) and record.get('lastCheckinMoney', 0) > 0 else '—'
                                     }
                                 ]
                             }
