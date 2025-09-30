@@ -1,6 +1,7 @@
 import json
 import re
 import time
+from collections import defaultdict
 from datetime import datetime, timedelta
 
 import pytz
@@ -23,7 +24,7 @@ class FengchaoSignin(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/madrays/MoviePilot-Plugins/main/icons/fengchao.png"
     # 插件版本
-    plugin_version = "1.0.9"
+    plugin_version = "1.1.0"
     # 插件作者
     plugin_author = "madrays"
     # 作者主页
@@ -395,12 +396,7 @@ class FengchaoSignin(_PluginBase):
                     "money": money,
                     "totalContinuousCheckIn": totalContinuousCheckIn,
                     "lastCheckinMoney": lastCheckinMoney,
-                    "retry": {
-                        "enabled": self._retry_count > 0,
-                        "current": self._current_retry,
-                        "max": self._retry_count,
-                        "interval": self._retry_interval
-                    }
+                    "failure_count": attempt
                 }
                 
                 # 保存签到历史
@@ -418,6 +414,15 @@ class FengchaoSignin(_PluginBase):
             logger.error(f"签到过程发生异常: {str(e)}")
             import traceback
             logger.error(f"错误详情: {traceback.format_exc()}")
+            
+            # 保存失败记录
+            failure_history_record = {
+                "date": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                "status": "签到失败",
+                "reason": str(e),
+                "failure_count": attempt + 1
+            }
+            self._save_history(failure_history_record)
             
             # 所有重试失败，发送通知并退出
             self._send_signin_failure_notification(str(e), attempt)
@@ -872,7 +877,14 @@ class FengchaoSignin(_PluginBase):
             # 获取用户基本信息
             username = user_attrs.get('displayName', '未知用户')
             avatar_url = user_attrs.get('avatarUrl', '')
-            money = user_attrs.get('money', 0)
+            
+            # 格式化花粉
+            money_val = user_attrs.get('money', 0)
+            try:
+                money = f"{float(money_val):.3f}"
+            except (ValueError, TypeError):
+                money = str(money_val)
+
             discussion_count = user_attrs.get('discussionCount', 0)
             comment_count = user_attrs.get('commentCount', 0)
             follower_count = user_attrs.get('followerCount', 0)
@@ -930,6 +942,76 @@ class FengchaoSignin(_PluginBase):
                     'icon_color': core_badge_info.get('iconColor'),
                     'label_color': core_badge_info.get('labelColor'),
                     'category': category_info.get('name', '其他')
+                })
+            
+            # 将徽章按分类分组
+            categorized_badges = defaultdict(list)
+            for badge in badges:
+                category_name = badge.get('category', '其他')
+                categorized_badges[category_name].append(badge)
+            
+            # 构建分类徽章组件
+            badge_category_components = []
+            for category_name, badge_list in sorted(categorized_badges.items()):
+                badge_category_components.append({
+                    'component': 'VCard',
+                    'props': {
+                        'variant': 'outlined',
+                        'class': 'mb-2'
+                    },
+                    'content': [
+                        {
+                            'component': 'VCardTitle',
+                            'props': {
+                                'class': 'py-1 px-3 text-body-2 font-weight-medium',
+                                'style': 'background-color: rgba(var(--v-theme-primary), 0.05);'
+                            },
+                            'text': category_name
+                        },
+                        {
+                            'component': 'VCardText',
+                            'props': {'class': 'pa-1'},
+                            'content': [
+                                {
+                                    'component': 'div',
+                                    'props': {'class': 'd-flex flex-wrap'},
+                                    'content': [
+                                        {
+                                            'component': 'div',
+                                            'props': {
+                                                'class': 'ma-1 pa-2 d-flex flex-column align-center',
+                                                'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; width: 90px;',
+                                                'title': badge.get('description', '无描述')
+                                            },
+                                            'content': [
+                                                {
+                                                    'component': 'VImg' if badge.get('image') else 'VIcon',
+                                                    'props': ({
+                                                        'src': badge.get('image'),
+                                                        'height': '50',
+                                                        'width': '50',
+                                                        'class': 'mb-2'
+                                                    } if badge.get('image') else {
+                                                        'icon': badge.get('icon'),
+                                                        'size': '50',
+                                                        'class': 'mb-2'
+                                                    })
+                                                },
+                                                {
+                                                    'component': 'div',
+                                                    'props': {
+                                                        'class': 'text-caption text-center',
+                                                        'style': 'white-space: normal; line-height: 1.2; font-weight: 500;'
+                                                    },
+                                                    'text': badge.get('name', '未知徽章')
+                                                }
+                                            ]
+                                        } for badge in badge_list
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
                 })
 
             # 用户信息卡
@@ -1168,7 +1250,7 @@ class FengchaoSignin(_PluginBase):
                                                                             {
                                                                                 'component': 'span',
                                                                                 'props': {'class': 'text-h6'},
-                                                                                'text': str(money)
+                                                                                'text': money
                                                                             }
                                                                         ]
                                                                     },
@@ -1430,43 +1512,7 @@ class FengchaoSignin(_PluginBase):
                                             }
                                         ]
                                     },
-                                    {
-                                        'component': 'div',
-                                        'props': {'class': 'd-flex flex-wrap'},
-                                        'content': [
-                                            {
-                                                'component': 'div',
-                                                'props': {
-                                                    'class': 'ma-1 pa-2 d-flex flex-column align-center elevation-1',
-                                                    'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; width: 90px;',
-                                                    'title': badge.get('description', '无描述')
-                                                },
-                                                'content': [
-                                                    {
-                                                        'component': 'VImg' if badge.get('image') else 'VIcon',
-                                                        'props': ({
-                                                            'src': badge.get('image'),
-                                                            'height': '50',
-                                                            'width': '50',
-                                                            'class': 'mb-2'
-                                                        } if badge.get('image') else {
-                                                            'icon': badge.get('icon'),
-                                                            'size': '50',
-                                                            'class': 'mb-2'
-                                                        })
-                                                    },
-                                                    {
-                                                        'component': 'div',
-                                                        'props': {
-                                                            'class': 'text-body-2',
-                                                            'style': 'white-space: normal; line-height: 1.2; font-weight: 500;'
-                                                        },
-                                                        'text': badge.get('name', '未知徽章')
-                                                    }
-                                                ]
-                                            } for badge in badges
-                                        ]
-                                    }
+                                    *badge_category_components
                                 ]
                             },
                             # 最后签到时间
@@ -1591,6 +1637,15 @@ class FengchaoSignin(_PluginBase):
                 status_color = "error"
                 status_icon = "mdi-close-circle"
             
+            # 格式化花粉
+            money_val = record.get('money')
+            money_text = '—'
+            if money_val is not None:
+                try:
+                    money_text = f"{float(money_val):.3f}"
+                except (ValueError, TypeError):
+                    money_text = str(money_val)
+
             history_rows.append({
                 'component': 'tr',
                 'content': [
@@ -1637,6 +1692,11 @@ class FengchaoSignin(_PluginBase):
                             }
                         ]
                     },
+                    # 失败次数列
+                    {
+                        'component': 'td',
+                        'text': str(record.get('failure_count', '—'))
+                    },
                     # 花粉列
                     {
                         'component': 'td',
@@ -1657,7 +1717,7 @@ class FengchaoSignin(_PluginBase):
                                     },
                                     {
                                         'component': 'span',
-                                        'text': record.get('money', '—')
+                                        'text': money_text
                                     }
                                 ]
                             }
@@ -1798,6 +1858,7 @@ class FengchaoSignin(_PluginBase):
                                                 'content': [
                                                     {'component': 'th', 'text': '时间'},
                                                     {'component': 'th', 'text': '状态'},
+                                                    {'component': 'th', 'text': '失败次数'},
                                                     {'component': 'th', 'text': '花粉'},
                                                     {'component': 'th', 'text': '签到天数'},
                                                     {'component': 'th', 'text': '奖励'}
