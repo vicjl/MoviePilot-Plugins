@@ -24,7 +24,7 @@ class FengchaoSignin(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/madrays/MoviePilot-Plugins/main/icons/fengchao.png"
     # 插件版本
-    plugin_version = "1.2.0"
+    plugin_version = "1.2.1"
     # 插件作者
     plugin_author = "madrays"
     # 作者主页
@@ -985,8 +985,8 @@ class FengchaoSignin(_PluginBase):
                 badge_category_components.append({
                     'component': 'div',
                     'props': {
-                        'class': 'pa-2 ma-1 elevation-1 flex-grow-1',
-                        'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; min-width: 220px;'
+                        'class': 'pa-2 ma-1 elevation-1',
+                        'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px;'
                     },
                     'content': [
                         {
@@ -1118,7 +1118,6 @@ class FengchaoSignin(_PluginBase):
                                                                         'component': 'VChip',
                                                                         'props': {
                                                                             'style': f"background-color: {group.get('color', '#6B7CA8')}; color: white;",
-                                                                            'size': 'small',
                                                                             'class': 'mr-1 mb-1',
                                                                             'variant': 'elevated'
                                                                         },
@@ -1127,7 +1126,6 @@ class FengchaoSignin(_PluginBase):
                                                                                 'component': 'VIcon',
                                                                                 'props': {
                                                                                     'start': True,
-                                                                                    'size': 'small'
                                                                                 },
                                                                                 'text': group.get('icon')
                                                                             },
