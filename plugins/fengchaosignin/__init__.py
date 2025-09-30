@@ -24,7 +24,7 @@ class FengchaoSignin(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/madrays/MoviePilot-Plugins/main/icons/fengchao.png"
     # 插件版本
-    plugin_version = "1.2.6"
+    plugin_version = "1.2.7"
     # 插件作者
     plugin_author = "madrays"
     # 作者主页
@@ -1135,7 +1135,7 @@ class FengchaoSignin(_PluginBase):
         history = sorted(history, key=lambda x: x.get("date", ""), reverse=True)
         history_rows = []
         status_colors = {"签到成功": "#4CAF50", "已签到": "#2196F3", "签到失败": "#F44336"}
-        status_icons = {"签到成功": "mdi-check-circle", "已签到": "mdi-information", "签到失败": "mdi-close-circle"}
+        status_icons = {"签到成功": "mdi-check-circle", "已签到": "mdi-information-outline", "签到失败": "mdi-close-circle"}
         
         for record in history:
             status_text = record.get("status", "未知")
@@ -1202,9 +1202,12 @@ class FengchaoSignin(_PluginBase):
                 .v-table { border-radius: 8px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
                 .v-table th { background-color: rgba(var(--v-theme-primary), 0.05); color: rgb(var(--v-theme-primary)); font-weight: 600; }
                 .marquee-text-wrapper { overflow: hidden; white-space: nowrap; }
-                .marquee-text { display: inline-block; animation: marquee-scroll 8s linear infinite; }
-                .marquee-text-wrapper:hover .marquee-text { animation-play-state: paused; }
-                @keyframes marquee-scroll { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
+                .marquee-text { display: inline-block; animation: marquee-scroll 10s linear infinite; animation-play-state: paused; }
+                .marquee-text-wrapper:hover .marquee-text { animation-play-state: running; }
+                @keyframes marquee-scroll {
+                  0% { transform: translateX(100%); }
+                  100% { transform: translateX(-100%); }
+                }
                 """
         })
         return components
