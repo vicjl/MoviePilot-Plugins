@@ -24,7 +24,7 @@ class FengchaoSignin(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/madrays/MoviePilot-Plugins/main/icons/fengchao.png"
     # 插件版本
-    plugin_version = "1.1.0"
+    plugin_version = "1.2.0"
     # 插件作者
     plugin_author = "madrays"
     # 作者主页
@@ -860,6 +860,40 @@ class FengchaoSignin(_PluginBase):
             "use_proxy": True
         }
 
+    def _map_fa_to_mdi(self, icon_class: str) -> str:
+        """
+        Maps common Font Awesome icon names to MDI icon names.
+        """
+        if not icon_class or not isinstance(icon_class, str):
+            return 'mdi-account-group'  # A generic default
+        if icon_class.startswith('mdi-'):
+            return icon_class  # It's already MDI
+
+        # Simple mapping for common FA icons
+        mapping = {
+            'fa-user-tie': 'mdi-account-tie',
+            'fa-crown': 'mdi-crown',
+            'fa-shield-alt': 'mdi-shield-outline',
+            'fa-user-shield': 'mdi-account-shield',
+            'fa-user-cog': 'mdi-account-cog',
+            'fa-user-check': 'mdi-account-check',
+            'fa-fan': 'mdi-fan',
+            'fa-user': 'mdi-account',
+            'fa-users': 'mdi-account-group',
+            'fa-cogs': 'mdi-cog',
+            'fa-cog': 'mdi-cog',
+            'fa-star': 'mdi-star',
+            'fa-gem': 'mdi-diamond'
+        }
+        
+        # Extract the core part of the icon class (e.g., from 'fas fa-user-tie' to 'fa-user-tie')
+        match = re.search(r'fa-[\w-]+', icon_class)
+        if match:
+            core_icon = match.group(0)
+            return mapping.get(core_icon, 'mdi-account-group')
+        
+        return 'mdi-account-group'
+
     def get_page(self) -> List[dict]:
         """
         构建插件详情页面，展示签到历史
@@ -918,19 +952,17 @@ class FengchaoSignin(_PluginBase):
                         groups.append({
                             'name': item.get('attributes', {}).get('nameSingular', ''),
                             'color': item.get('attributes', {}).get('color', '#888'),
-                            'icon': item.get('attributes', {}).get('icon', '')
+                            'icon': self._map_fa_to_mdi(item.get('attributes', {}).get('icon', ''))
                         })
 
             # 徽章获取逻辑
             badges = []
             user_badges_data = user_attrs.get('badges', [])
             for badge_item in user_badges_data:
-                # 徽章的核心信息在嵌套的 'badge' 对象里
                 core_badge_info = badge_item.get('badge', {})
                 if not core_badge_info:
                     continue
                 
-                # 徽章的分类信息在更深一层
                 category_info = core_badge_info.get('category', {})
                 
                 badges.append({
@@ -938,9 +970,6 @@ class FengchaoSignin(_PluginBase):
                     'icon': core_badge_info.get('icon', 'fas fa-award'),
                     'description': core_badge_info.get('description', '无描述'),
                     'image': core_badge_info.get('image'),
-                    'background_color': core_badge_info.get('backgroundColor'),
-                    'icon_color': core_badge_info.get('iconColor'),
-                    'label_color': core_badge_info.get('labelColor'),
                     'category': category_info.get('name', '其他')
                 })
             
@@ -954,61 +983,52 @@ class FengchaoSignin(_PluginBase):
             badge_category_components = []
             for category_name, badge_list in sorted(categorized_badges.items()):
                 badge_category_components.append({
-                    'component': 'VCard',
+                    'component': 'div',
                     'props': {
-                        'variant': 'outlined',
-                        'class': 'mb-2'
+                        'class': 'pa-2 ma-1 elevation-1 flex-grow-1',
+                        'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; min-width: 220px;'
                     },
                     'content': [
                         {
-                            'component': 'VCardTitle',
-                            'props': {
-                                'class': 'py-1 px-3 text-body-2 font-weight-medium',
-                                'style': 'background-color: rgba(var(--v-theme-primary), 0.05);'
-                            },
+                            'component': 'div',
+                            'props': {'class': 'text-subtitle-2 font-weight-bold mb-2'},
                             'text': category_name
                         },
                         {
-                            'component': 'VCardText',
-                            'props': {'class': 'pa-1'},
+                            'component': 'div',
+                            'props': {'class': 'd-flex flex-wrap'},
                             'content': [
                                 {
                                     'component': 'div',
-                                    'props': {'class': 'd-flex flex-wrap'},
+                                    'props': {
+                                        'class': 'ma-1 pa-2 d-flex flex-column align-center',
+                                        'style': 'border-radius: 4px; width: 90px;',
+                                        'title': badge.get('description', '无描述')
+                                    },
                                     'content': [
+                                        {
+                                            'component': 'VImg' if badge.get('image') else 'VIcon',
+                                            'props': ({
+                                                'src': badge.get('image'),
+                                                'height': '50',
+                                                'width': '50',
+                                                'class': 'mb-2'
+                                            } if badge.get('image') else {
+                                                'icon': self._map_fa_to_mdi(badge.get('icon')),
+                                                'size': '50',
+                                                'class': 'mb-2'
+                                            })
+                                        },
                                         {
                                             'component': 'div',
                                             'props': {
-                                                'class': 'ma-1 pa-2 d-flex flex-column align-center',
-                                                'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px; width: 90px;',
-                                                'title': badge.get('description', '无描述')
+                                                'class': 'text-caption text-center',
+                                                'style': 'white-space: normal; line-height: 1.2; font-weight: 500;'
                                             },
-                                            'content': [
-                                                {
-                                                    'component': 'VImg' if badge.get('image') else 'VIcon',
-                                                    'props': ({
-                                                        'src': badge.get('image'),
-                                                        'height': '50',
-                                                        'width': '50',
-                                                        'class': 'mb-2'
-                                                    } if badge.get('image') else {
-                                                        'icon': badge.get('icon'),
-                                                        'size': '50',
-                                                        'class': 'mb-2'
-                                                    })
-                                                },
-                                                {
-                                                    'component': 'div',
-                                                    'props': {
-                                                        'class': 'text-caption text-center',
-                                                        'style': 'white-space: normal; line-height: 1.2; font-weight: 500;'
-                                                    },
-                                                    'text': badge.get('name', '未知徽章')
-                                                }
-                                            ]
-                                        } for badge in badge_list
+                                            'text': badge.get('name', '未知徽章')
+                                        }
                                     ]
-                                }
+                                } for badge in badge_list
                             ]
                         }
                     ]
@@ -1020,22 +1040,9 @@ class FengchaoSignin(_PluginBase):
                 'props': {
                     'variant': 'outlined',
                     'class': 'mb-4',
-                    # 使用新的背景图变量
                     'style': f"background-image: url('{background_image}'); background-size: cover; background-position: center;" if background_image else ''
                 },
                 'content': [
-                    {
-                        'component': 'VCardTitle',
-                        'props': {'class': 'd-flex align-center'},
-                        'content': [
-                            {
-                                'component': 'VSpacer'
-                            }
-                        ]
-                    },
-                    {
-                        'component': 'VDivider'
-                    },
                     {
                         'component': 'VCardText',
                         'content': [
@@ -1110,8 +1117,7 @@ class FengchaoSignin(_PluginBase):
                                                                     {
                                                                         'component': 'VChip',
                                                                         'props': {
-                                                                            # 使用用户组自己的颜色
-                                                                            'style': f"background-color: {group.get('color', '#6B7CA8')}; color: white; padding: 0 8px; min-width: 60px; border-radius: 2px; height: 32px;",
+                                                                            'style': f"background-color: {group.get('color', '#6B7CA8')}; color: white;",
                                                                             'size': 'small',
                                                                             'class': 'mr-1 mb-1',
                                                                             'variant': 'elevated'
@@ -1121,10 +1127,9 @@ class FengchaoSignin(_PluginBase):
                                                                                 'component': 'VIcon',
                                                                                 'props': {
                                                                                     'start': True,
-                                                                                    'size': 'small',
-                                                                                    'style': 'margin-right: 3px;'
+                                                                                    'size': 'small'
                                                                                 },
-                                                                                'text': group.get('icon') or 'mdi-account'
+                                                                                'text': group.get('icon')
                                                                             },
                                                                             {
                                                                                 'component': 'span',
@@ -1487,12 +1492,12 @@ class FengchaoSignin(_PluginBase):
                             # 徽章部分
                             {
                                 'component': 'div',
-                                'props': {'class': 'mb-1 mt-1 pl-0'},
+                                'props': {'class': 'mb-1 mt-3 pl-0'},
                                 'content': [
                                     {
                                         'component': 'div',
                                         'props': {
-                                            'class': 'd-flex align-center mb-1 elevation-1 d-inline-block ml-0',
+                                            'class': 'd-flex align-center mb-2 elevation-1 d-inline-block ml-0',
                                             'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 3px; width: fit-content; padding: 2px 8px 2px 5px;'
                                         },
                                         'content': [
@@ -1512,14 +1517,18 @@ class FengchaoSignin(_PluginBase):
                                             }
                                         ]
                                     },
-                                    *badge_category_components
+                                    {
+                                        'component': 'div',
+                                        'props': {'class': 'd-flex flex-wrap'},
+                                        'content': badge_category_components
+                                    }
                                 ]
                             },
                             # 最后签到时间
                             {
                                 'component': 'div',
                                 'props': {
-                                    'class': 'mt-1 text-caption text-right grey--text pa-1 elevation-1 d-inline-block float-right',
+                                    'class': 'mt-3 text-caption text-right grey--text pa-1 elevation-1 d-inline-block float-right',
                                     'style': 'background-color: rgba(255, 255, 255, 0.6); border-radius: 4px;'
                                 },
                                 'text': f'最后签到: {last_checkin_time}'
