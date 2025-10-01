@@ -24,7 +24,7 @@ class FengchaoSignin(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/madrays/MoviePilot-Plugins/main/icons/fengchao.png"
     # 插件版本
-    plugin_version = "1.2.7"
+    plugin_version = "1.2.8"
     # 插件作者
     plugin_author = "madrays"
     # 作者主页
@@ -960,58 +960,58 @@ class FengchaoSignin(_PluginBase):
 
             badge_category_components = []
             if categorized_badges:
-                badge_category_components.append({
-                    'component': 'div',
-                    'props': {'class': 'd-flex flex-wrap'},
-                    'content': [
-                        {
+                for category_name, badge_list in sorted(categorized_badges.items()):
+                    badge_items_with_dividers = []
+                    for i, badge in enumerate(badge_list):
+                        badge_items_with_dividers.append({
+                            'component': 'div',
+                            'props': {
+                                'class': 'ma-1 pa-1 d-flex flex-column align-center',
+                                'style': 'width: 90px; text-align: center;',
+                                'title': badge.get('description', '无描述')
+                            },
+                            'content': [
+                                {
+                                    'component': 'VImg' if badge.get('image') else 'VIcon',
+                                    'props': ({
+                                        'src': badge.get('image'), 'height': '48', 'width': '48', 'class': 'mb-1'
+                                    } if badge.get('image') else {
+                                        'icon': self._map_fa_to_mdi(badge.get('icon')), 'size': '48', 'class': 'mb-1'
+                                    })
+                                },
+                                {
+                                    'component': 'div',
+                                    'props': {'class': 'marquee-text-wrapper', 'style': 'width: 100%; height: 20px;'},
+                                    'content': [{
+                                        'component': 'div',
+                                        'props': {
+                                            'class': 'text-caption marquee-text',
+                                            'style': 'line-height: 20px; font-weight: 500;'
+                                        },
+                                        'text': badge.get('name', '未知徽章')
+                                    }]
+                                }
+                            ]
+                        })
+                        if i < len(badge_list) - 1:
+                            badge_items_with_dividers.append({
+                                'component': 'VDivider',
+                                'props': {'vertical': True, 'class': 'my-2'}
+                            })
+                    
+                    badge_category_components.append({
+                        'component': 'div',
+                        'props': {'class': 'd-flex flex-wrap'},
+                        'content': [{
                             'component': 'div',
                             'props': {'class': 'ma-1 pa-2', 'style': f'{frost_style} border-radius: 12px;'},
                             'content': [
-                                {'component': 'div',
-                                 'props': {'class': 'text-subtitle-2 grey--text text--darken-1', 'style': 'text-align: center;'},
-                                 'text': category_name},
+                                {'component': 'div', 'props': {'class': 'text-subtitle-2 grey--text text--darken-1', 'style': 'text-align: center;'}, 'text': category_name},
                                 {'component': 'VDivider', 'props': {'class': 'my-1'}},
-                                {
-                                    'component': 'div',
-                                    'props': {'class': 'd-flex flex-wrap justify-center'},
-                                    'content': [
-                                        {
-                                            'component': 'div',
-                                            'props': {
-                                                'class': 'ma-1 pa-1 d-flex flex-column align-center',
-                                                'style': 'width: 90px; text-align: center;',
-                                                'title': badge.get('description', '无描述')
-                                            },
-                                            'content': [
-                                                {
-                                                    'component': 'VImg' if badge.get('image') else 'VIcon',
-                                                    'props': ({
-                                                                  'src': badge.get('image'), 'height': '48', 'width': '48', 'class': 'mb-1'
-                                                              } if badge.get('image') else {
-                                                        'icon': self._map_fa_to_mdi(badge.get('icon')), 'size': '48', 'class': 'mb-1'
-                                                    })
-                                                },
-                                                {
-                                                    'component': 'div',
-                                                    'props': {'class': 'marquee-text-wrapper', 'style': 'width: 100%; height: 20px;'},
-                                                    'content': [{
-                                                        'component': 'div',
-                                                        'props': {
-                                                            'class': 'text-caption marquee-text',
-                                                            'style': 'line-height: 20px; font-weight: 500; text-align: center;'
-                                                        },
-                                                        'text': badge.get('name', '未知徽章')
-                                                    }]
-                                                }
-                                            ]
-                                        } for badge in badge_list
-                                    ]
-                                }
+                                {'component': 'div', 'props': {'class': 'd-flex flex-wrap justify-center align-center'}, 'content': badge_items_with_dividers}
                             ]
-                        } for category_name, badge_list in sorted(categorized_badges.items())
-                    ]
-                })
+                        }]
+                    })
 
             user_info_card = {
                 'component': 'VCard',
@@ -1055,42 +1055,42 @@ class FengchaoSignin(_PluginBase):
                             ]},
                             {'component': 'VCol', 'props': {'cols': 12, 'md': 7}, 'content': [
                                 {'component': 'VRow', 'content': [
-                                    {'component': 'VCol', 'props': {'cols': 6, 'sm': 4}, 'content': [{'component': 'div', 'props': {'class': 'text-center pa-2 elevation-2', 'style': frost_style}, 'content': [
+                                    {'component': 'VCol', 'props': {'cols': 6, 'md': 4}, 'content': [{'component': 'div', 'props': {'class': 'text-center pa-2 elevation-2', 'style': frost_style}, 'content': [
                                         {'component': 'div', 'props': {'class': 'd-flex justify-center align-center'}, 'content': [
                                             {'component': 'VIcon', 'props': {'style': 'color: #FFC107;', 'class': 'mr-1'}, 'text': 'mdi-flower'},
                                             {'component': 'span', 'props': {'class': 'text-h6'}, 'text': str(money)}
                                         ]},
                                         {'component': 'div', 'props': {'class': 'text-caption mt-1'}, 'text': '花粉'}
                                     ]}]},
-                                    {'component': 'VCol', 'props': {'cols': 6, 'sm': 4}, 'content': [{'component': 'div', 'props': {'class': 'text-center pa-2 elevation-2', 'style': frost_style}, 'content': [
+                                    {'component': 'VCol', 'props': {'cols': 6, 'md': 4}, 'content': [{'component': 'div', 'props': {'class': 'text-center pa-2 elevation-2', 'style': frost_style}, 'content': [
                                         {'component': 'div', 'props': {'class': 'd-flex justify-center align-center'}, 'content': [
                                             {'component': 'VIcon', 'props': {'style': 'color: #3F51B5;', 'class': 'mr-1'}, 'text': 'mdi-forum'},
                                             {'component': 'span', 'props': {'class': 'text-h6'}, 'text': str(discussion_count)}
                                         ]},
                                         {'component': 'div', 'props': {'class': 'text-caption mt-1'}, 'text': '主题'}
                                     ]}]},
-                                    {'component': 'VCol', 'props': {'cols': 6, 'sm': 4}, 'content': [{'component': 'div', 'props': {'class': 'text-center pa-2 elevation-2', 'style': frost_style}, 'content': [
+                                    {'component': 'VCol', 'props': {'cols': 6, 'md': 4}, 'content': [{'component': 'div', 'props': {'class': 'text-center pa-2 elevation-2', 'style': frost_style}, 'content': [
                                         {'component': 'div', 'props': {'class': 'd-flex justify-center align-center'}, 'content': [
                                             {'component': 'VIcon', 'props': {'style': 'color: #00BCD4;', 'class': 'mr-1'}, 'text': 'mdi-comment-text-multiple'},
                                             {'component': 'span', 'props': {'class': 'text-h6'}, 'text': str(comment_count)}
                                         ]},
                                         {'component': 'div', 'props': {'class': 'text-caption mt-1'}, 'text': '评论'}
                                     ]}]},
-                                    {'component': 'VCol', 'props': {'cols': 6, 'sm': 4}, 'content': [{'component': 'div', 'props': {'class': 'text-center pa-2 elevation-2', 'style': frost_style}, 'content': [
+                                    {'component': 'VCol', 'props': {'cols': 6, 'md': 4}, 'content': [{'component': 'div', 'props': {'class': 'text-center pa-2 elevation-2', 'style': frost_style}, 'content': [
                                         {'component': 'div', 'props': {'class': 'd-flex justify-center align-center'}, 'content': [
                                             {'component': 'VIcon', 'props': {'style': 'color: #673AB7;', 'class': 'mr-1'}, 'text': 'mdi-account-group'},
                                             {'component': 'span', 'props': {'class': 'text-h6'}, 'text': str(follower_count)}
                                         ]},
                                         {'component': 'div', 'props': {'class': 'text-caption mt-1'}, 'text': '粉丝'}
                                     ]}]},
-                                    {'component': 'VCol', 'props': {'cols': 6, 'sm': 4}, 'content': [{'component': 'div', 'props': {'class': 'text-center pa-2 elevation-2', 'style': frost_style}, 'content': [
+                                    {'component': 'VCol', 'props': {'cols': 6, 'md': 4}, 'content': [{'component': 'div', 'props': {'class': 'text-center pa-2 elevation-2', 'style': frost_style}, 'content': [
                                         {'component': 'div', 'props': {'class': 'd-flex justify-center align-center'}, 'content': [
                                             {'component': 'VIcon', 'props': {'style': 'color: #03A9F4;', 'class': 'mr-1'}, 'text': 'mdi-account-multiple-plus'},
                                             {'component': 'span', 'props': {'class': 'text-h6'}, 'text': str(following_count)}
                                         ]},
                                         {'component': 'div', 'props': {'class': 'text-caption mt-1'}, 'text': '关注'}
                                     ]}]},
-                                    {'component': 'VCol', 'props': {'cols': 12, 'sm': 4}, 'content': [{'component': 'div', 'props': {'class': 'text-center pa-2 elevation-2', 'style': frost_style}, 'content': [
+                                    {'component': 'VCol', 'props': {'cols': 6, 'md': 4}, 'content': [{'component': 'div', 'props': {'class': 'text-center pa-2 elevation-2', 'style': frost_style}, 'content': [
                                         {'component': 'div', 'props': {'class': 'd-flex justify-center align-center'}, 'content': [
                                             {'component': 'VIcon', 'props': {'style': 'color: #009688;', 'class': 'mr-1'}, 'text': 'mdi-calendar-check'},
                                             {'component': 'span', 'props': {'class': 'text-h6'}, 'text': str(total_continuous_checkin)}
@@ -1201,12 +1201,17 @@ class FengchaoSignin(_PluginBase):
             'text': """
                 .v-table { border-radius: 8px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
                 .v-table th { background-color: rgba(var(--v-theme-primary), 0.05); color: rgb(var(--v-theme-primary)); font-weight: 600; }
-                .marquee-text-wrapper { overflow: hidden; white-space: nowrap; }
-                .marquee-text { display: inline-block; animation: marquee-scroll 10s linear infinite; animation-play-state: paused; }
-                .marquee-text-wrapper:hover .marquee-text { animation-play-state: running; }
+                .marquee-text-wrapper { display: flex; justify-content: center; align-items: center; overflow: hidden; }
+                .marquee-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+                .marquee-text-wrapper:hover .marquee-text {
+                    max-width: none;
+                    overflow: visible;
+                    text-overflow: clip;
+                    animation: marquee-scroll 10s linear infinite;
+                }
                 @keyframes marquee-scroll {
-                  0% { transform: translateX(100%); }
-                  100% { transform: translateX(-100%); }
+                    0% { transform: translateX(100%); }
+                    100% { transform: translateX(-100%); }
                 }
                 """
         })
