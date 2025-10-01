@@ -193,7 +193,6 @@ class FengchaoSignin(_PluginBase):
             remaining_retries = self._retry_count - self._current_retry
             retry_info = ""
             if self._retry_count > 0 and remaining_retries > 0:
-                # 修复：显示固定的重试间隔，而不是累加
                 next_retry_hours = self._retry_interval
                 retry_info = (
                     f"🔄 重试信息\n"
@@ -249,7 +248,6 @@ class FengchaoSignin(_PluginBase):
             if not cookie:
                 raise Exception("登录失败，无法获取Cookie")
 
-            # 步骤1：访问主页以获取userId
             res_main = None
             try:
                 res_main = RequestUtils(cookies=cookie, proxies=proxies, timeout=30).get_res(url="https://pting.club")
@@ -266,9 +264,7 @@ class FengchaoSignin(_PluginBase):
 
             userId = match.group(1)
 
-            # 步骤2：直接调用Flarum API获取完整的用户信息
             res_api = None
-            # 根据测试，直接使用能正常工作的基础API链接
             api_url = f"https://pting.club/api/users/{userId}"
 
             logger.info(f"正在使用API URL: {api_url}")
@@ -462,7 +458,6 @@ class FengchaoSignin(_PluginBase):
                 totalContinuousCheckIn = sign_dict['data']['attributes']['totalContinuousCheckIn']
                 lastCheckinMoney = sign_dict['data']['attributes'].get('lastCheckinMoney', 0)
 
-                # 改进：通过比较签到前后数据判断真实签到状态
                 is_successful_checkin = False
                 if pre_money is not None and pre_days is not None:
                     if money > pre_money or totalContinuousCheckIn > pre_days:
@@ -585,10 +580,6 @@ class FengchaoSignin(_PluginBase):
             elif is_new_success and not is_last_success:
                 history[last_today_index] = record
                 logger.info("签到成功，覆盖当天失败记录")
-            # 场景3: 其他情况 (如成功后又手动运行，或已签到后手动运行) -> 不再新增重复的「已签到」记录
-            elif is_new_success and is_last_success:
-                logger.info("今日已签到或已成功记录，跳过新增历史。")
-                return # 直接返回，不添加也不修改
             else:
                 history.append(record)
         else:
