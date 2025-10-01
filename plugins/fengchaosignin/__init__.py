@@ -24,7 +24,7 @@ class FengchaoSignin(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/madrays/MoviePilot-Plugins/main/icons/fengchao.png"
     # 插件版本
-    plugin_version = "1.3.1"
+    plugin_version = "1.3.4"
     # 插件作者
     plugin_author = "madrays & Gemini"
     # 作者主页
@@ -107,14 +107,10 @@ class FengchaoSignin(_PluginBase):
         # 立即运行一次（签到和信息更新）
         if self._onlyonce:
             logger.info(f"蜂巢插件启动，立即运行一次（签到和信息更新）")
-            # 安排签到任务
+            # 安排签到任务，该任务成功后会自行更新用户信息
             self._scheduler.add_job(func=self.__signin, trigger='date',
                                     run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=3),
-                                    name="蜂巢签到（单次）")
-            # 安排信息更新任务
-            self._scheduler.add_job(func=self.__update_user_info, trigger='date',
-                                    run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=5),
-                                    name="蜂巢信息更新（单次）")
+                                    name="蜂巢签到与信息更新（单次）")
             # 关闭一次性开关
             self._onlyonce = False
             self.update_config(self.get_config_dict())
@@ -253,8 +249,14 @@ class FengchaoSignin(_PluginBase):
             if not cookie:
                 raise Exception("登录失败，无法获取Cookie")
 
-            # 访问主页以获取userId
-            res_main = RequestUtils(cookies=cookie, proxies=proxies, timeout=30).get_res(url="https://pting.club")
+            # 步骤1：访问主页以获取userId
+            res_main = None
+            try:
+                res_main = RequestUtils(cookies=cookie, proxies=proxies, timeout=30).get_res(url="https://pting.club")
+            except Exception as e:
+                logger.error(f"访问主页时发生网络错误: {e}")
+                raise Exception(f"访问主页失败: {e}")
+
             if not res_main or res_main.status_code != 200:
                 raise Exception(f"访问主页失败，状态码: {res_main.status_code if res_main else 'N/A'}")
 
@@ -264,9 +266,17 @@ class FengchaoSignin(_PluginBase):
 
             userId = match.group(1)
 
-            # 直接调用Flarum API获取完整的用户信息
-            api_url = f"https://pting.club/api/users/{userId}?include=groups,badges,badges.badge.category"
-            res_api = RequestUtils(cookies=cookie, proxies=proxies, timeout=30).get_res(url=api_url)
+            # 步骤2：直接调用Flarum API获取完整的用户信息
+            res_api = None
+            # 根据测试，直接使用能正常工作的基础API链接
+            api_url = f"https://pting.club/api/users/{userId}"
+
+            logger.info(f"正在使用API URL: {api_url}")
+            try:
+                res_api = RequestUtils(cookies=cookie, proxies=proxies, timeout=30).get_res(url=api_url)
+            except Exception as e:
+                logger.error(f"请求API时发生网络错误: {e}")
+                raise Exception(f"API请求失败: {e}")
 
             if not res_api or res_api.status_code != 200:
                 raise Exception(f"API请求失败，状态码: {res_api.status_code if res_api else 'N/A'}")
@@ -361,9 +371,19 @@ class FengchaoSignin(_PluginBase):
                         continue
                     raise Exception("无法连接到站点")
 
-                # 签到前检查状态
-                can_checkin_before = '"canCheckin":true' in res.text
-                logger.info(f"签到前状态检查: canCheckin -> {can_checkin_before}")
+                # 改进：签到前获取当前花粉和天数，用于事后比较，避免API标志位误导
+                pre_money = None
+                pre_days = None
+                try:
+                    pre_money_match = re.search(r'"money":\s*([\d.]+)', res.text)
+                    if pre_money_match:
+                        pre_money = float(pre_money_match.group(1))
+                    pre_days_match = re.search(r'"totalContinuousCheckIn":\s*(\d+)', res.text)
+                    if pre_days_match:
+                        pre_days = int(pre_days_match.group(1))
+                    logger.info(f"签到前状态检查：当前花粉 -> {pre_money}, 签到天数 -> {pre_days}")
+                except Exception as e:
+                    logger.warning(f"签到前解析用户状态失败，将依赖API原始判断: {e}")
 
                 # 获取csrfToken
                 pattern = r'"csrfToken":"(.*?)"'
@@ -442,10 +462,21 @@ class FengchaoSignin(_PluginBase):
                 totalContinuousCheckIn = sign_dict['data']['attributes']['totalContinuousCheckIn']
                 lastCheckinMoney = sign_dict['data']['attributes'].get('lastCheckinMoney', 0)
 
-                # 根据签到前的状态来判断
-                if can_checkin_before:
+                # 改进：通过比较签到前后数据判断真实签到状态
+                is_successful_checkin = False
+                if pre_money is not None and pre_days is not None:
+                    if money > pre_money or totalContinuousCheckIn > pre_days:
+                        is_successful_checkin = True
+                else:
+                    # 如果签到前数据获取失败，则回退到旧的判断逻辑
+                    can_checkin_before = '"canCheckin":true' in res.text
+                    logger.info(f"回退到API标志位判断: canCheckin -> {can_checkin_before}")
+                    if can_checkin_before:
+                        is_successful_checkin = True
+
+                if is_successful_checkin:
                     status_text = "签到成功"
-                    reward_text = f"获得{lastCheckinMoney}花粉奖励"
+                    reward_text = f"获得{lastCheckinMoney}花粉奖励" if lastCheckinMoney > 0 else "获得奖励"
                     logger.info(f"蜂巢签到成功，获得{lastCheckinMoney}花粉，当前花粉: {money}，累计签到: {totalContinuousCheckIn}")
                 else:
                     status_text = "已签到"
@@ -476,7 +507,7 @@ class FengchaoSignin(_PluginBase):
                     "status": status_text,
                     "money": money,
                     "totalContinuousCheckIn": totalContinuousCheckIn,
-                    "lastCheckinMoney": lastCheckinMoney,
+                    "lastCheckinMoney": lastCheckinMoney if is_successful_checkin else 0,
                     "failure_count": 0
                 }
 
@@ -554,7 +585,10 @@ class FengchaoSignin(_PluginBase):
             elif is_new_success and not is_last_success:
                 history[last_today_index] = record
                 logger.info("签到成功，覆盖当天失败记录")
-            # 场景3: 其他情况 (如成功后又手动运行) -> 新增记录
+            # 场景3: 其他情况 (如成功后又手动运行，或已签到后手动运行) -> 不再新增重复的「已签到」记录
+            elif is_new_success and is_last_success:
+                logger.info("今日已签到或已成功记录，跳过新增历史。")
+                return # 直接返回，不添加也不修改
             else:
                 history.append(record)
         else:
@@ -943,8 +977,8 @@ class FengchaoSignin(_PluginBase):
             money = self._format_pollen(user_attrs.get('money', 0))
             discussion_count = user_attrs.get('discussionCount', 0)
             comment_count = user_attrs.get('commentCount', 0)
-            follower_count = user_attrs.get('followerCount', 0)
-            following_count = user_attrs.get('followingCount', 0)
+            follower_count = 0 # API响应中似乎没有此字段，暂时设为0
+            following_count = 0 # API响应中似乎没有此字段，暂时设为0
             last_checkin_time = user_attrs.get('lastCheckinTime', '未知')
             total_continuous_checkin = user_attrs.get('totalContinuousCheckIn', 0)
             join_time_str = user_attrs.get('joinTime', '')
@@ -973,6 +1007,7 @@ class FengchaoSignin(_PluginBase):
                         })
 
             badges = []
+            # API将badges直接放在了attributes下
             user_badges_data = user_attrs.get('badges', [])
             for badge_item in user_badges_data:
                 core_badge_info = badge_item.get('badge', {})
