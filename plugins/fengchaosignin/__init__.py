@@ -2,7 +2,7 @@ import json
 import re
 import time
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 
 import pytz
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -24,9 +24,9 @@ class FengchaoSignin(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/madrays/MoviePilot-Plugins/main/icons/fengchao.png"
     # 插件版本
-    plugin_version = "1.2.9"
+    plugin_version = "1.3.0"
     # 插件作者
-    plugin_author = "madrays"
+    plugin_author = "madrays & Gemini"
     # 作者主页
     author_url = "https://github.com/madrays"
     # 插件配置项ID前缀
@@ -273,6 +273,7 @@ class FengchaoSignin(_PluginBase):
 
             user_info = res_api.json()
             self.save_data("user_info", user_info)
+            self.save_data("user_info_updated_at", datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
             logger.info("成功更新并保存了蜂巢用户信息。")
 
             self._send_notification(
@@ -428,24 +429,24 @@ class FengchaoSignin(_PluginBase):
                 # 签到成功
                 sign_dict = json.loads(res.text)
 
-                # 直接保存签到后的用户信息，不再进行二次请求
+                # 直接保存签到后的用户信息
                 self.save_data("user_info", sign_dict)
+                self.save_data("user_info_updated_at", datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
                 logger.info("成功获取并保存用户信息。")
 
                 money = sign_dict['data']['attributes']['money']
                 totalContinuousCheckIn = sign_dict['data']['attributes']['totalContinuousCheckIn']
-                # 获取签到奖励花粉数量
                 lastCheckinMoney = sign_dict['data']['attributes'].get('lastCheckinMoney', 0)
 
-                # 检查是否已签到
-                if "canCheckin" in sign_dict['data']['attributes'] and not sign_dict['data']['attributes']['canCheckin']:
-                    status_text = "已签到"
-                    reward_text = "今日已领取奖励"
-                    logger.info(f"蜂巢已签到，当前花粉: {money}，累计签到: {totalContinuousCheckIn}")
-                else:
+                # 区分 签到成功 和 已签到
+                if lastCheckinMoney > 0:
                     status_text = "签到成功"
                     reward_text = f"获得{lastCheckinMoney}花粉奖励"
                     logger.info(f"蜂巢签到成功，获得{lastCheckinMoney}花粉，当前花粉: {money}，累计签到: {totalContinuousCheckIn}")
+                else:
+                    status_text = "已签到"
+                    reward_text = "今日已领取奖励"
+                    logger.info(f"蜂巢已签到，当前花粉: {money}，累计签到: {totalContinuousCheckIn}")
 
                 # 发送通知
                 if self._notify:
@@ -465,18 +466,18 @@ class FengchaoSignin(_PluginBase):
                         )
                     )
 
-                # 读取历史记录
-                history = {
-                    "date": datetime.today().strftime('%Y-%m-%d %H:%M:%S'),
+                # 准备历史记录
+                history_record = {
+                    "date": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     "status": status_text,
                     "money": money,
                     "totalContinuousCheckIn": totalContinuousCheckIn,
                     "lastCheckinMoney": lastCheckinMoney,
-                    "failure_count": attempt
+                    "failure_count": 0
                 }
 
                 # 保存签到历史
-                self._save_history(history)
+                self._save_history(history_record)
 
                 # 如果是重试后成功，重置重试计数
                 if self._current_retry > 0:
@@ -496,7 +497,7 @@ class FengchaoSignin(_PluginBase):
                 "date": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 "status": "签到失败",
                 "reason": str(e),
-                "failure_count": attempt + 1
+                "failure_count": 1 # 初始失败次数为1
             }
             self._save_history(failure_history_record)
 
@@ -519,12 +520,42 @@ class FengchaoSignin(_PluginBase):
             # 释放锁
             self._signing_in = False
 
-    def _save_history(self, record):
+    def _save_history(self, record: Dict[str, Any]):
         """
-        保存签到历史记录
+        保存签到历史记录，实现同日失败记录的更新和成功记录的覆盖。
         """
-        # 读取历史记录
         history = self.get_data('history') or []
+        today_str = date.today().strftime('%Y-%m-%d')
+        
+        # 查找今天最后一条记录
+        last_today_index = -1
+        for i in range(len(history) - 1, -1, -1):
+            if history[i].get("date", "").startswith(today_str):
+                last_today_index = i
+                break
+        
+        is_new_success = "成功" in record.get("status", "") or "已签到" in record.get("status", "")
+        
+        if last_today_index != -1:
+            last_record = history[last_today_index]
+            is_last_success = "成功" in last_record.get("status", "") or "已签到" in last_record.get("status", "")
+
+            # 场景1: 新记录是失败，旧记录也是失败 -> 更新失败次数
+            if not is_new_success and not is_last_success:
+                last_record["failure_count"] = last_record.get("failure_count", 0) + record.get("failure_count", 1)
+                last_record["date"] = record["date"]
+                last_record["reason"] = record.get("reason", "")
+                logger.info(f"更新当天签到失败记录，累计失败: {last_record['failure_count']}次")
+            # 场景2: 新记录是成功，旧记录是失败 -> 覆盖
+            elif is_new_success and not is_last_success:
+                history[last_today_index] = record
+                logger.info("签到成功，覆盖当天失败记录")
+            # 场景3: 其他情况 (如成功后又手动运行) -> 新增记录
+            else:
+                history.append(record)
+        else:
+            # 今天没有记录，直接新增
+            history.append(record)
 
         # 如果是失败状态，添加重试信息
         if "失败" in record.get("status", ""):
@@ -535,21 +566,16 @@ class FengchaoSignin(_PluginBase):
                 "interval": self._retry_interval
             }
 
-        # 添加新记录
-        history.append(record)
-
         # 保留指定天数的记录
         if self._history_days:
             try:
                 thirty_days_ago = time.time() - int(self._history_days) * 24 * 60 * 60
-                history = [record for record in history if
-                           datetime.strptime(record["date"],
-                                             '%Y-%m-%d %H:%M:%S').timestamp() >= thirty_days_ago]
+                history = [r for r in history if
+                           datetime.strptime(r["date"], '%Y-%m-%d %H:%M:%S').timestamp() >= thirty_days_ago]
             except Exception as e:
                 logger.error(f"清理历史记录异常: {str(e)}")
 
-        # 保存历史记录
-        self.save_data(key="history", value=history)
+        self.save_data("history", history)
 
     def get_state(self) -> bool:
         return self._enabled
@@ -900,6 +926,8 @@ class FengchaoSignin(_PluginBase):
         """
         history = self.get_data('history') or []
         user_info = self.get_data('user_info')
+        user_info_updated_at = self.get_data('user_info_updated_at')
+        pt_life_updated_at = self.get_data('last_push_time')
         user_info_card = None
 
         frost_style = 'background-color: rgba(255, 255, 255, 0.75); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 8px;'
@@ -918,6 +946,7 @@ class FengchaoSignin(_PluginBase):
             join_time_str = user_attrs.get('joinTime', '')
             last_seen_at_str = user_attrs.get('lastSeenAt', '')
             background_image = user_attrs.get('decorationProfileBackground') or user_attrs.get('cover')
+            unread_notifications = user_attrs.get('unreadNotificationCount', 0)
 
             try:
                 join_time = datetime.fromisoformat(join_time_str.replace('Z', '+00:00')).strftime('%Y-%m-%d')
@@ -957,8 +986,7 @@ class FengchaoSignin(_PluginBase):
             categorized_badges = defaultdict(list)
             for badge in badges:
                 categorized_badges[badge.get('category', '其他')].append(badge)
-            
-            # This will contain a single div wrapper for all categories
+
             badge_category_components = []
             if categorized_badges:
                 all_category_cards = []
@@ -966,25 +994,44 @@ class FengchaoSignin(_PluginBase):
                     badge_items_with_dividers = []
                     for i, badge in enumerate(badge_list):
                         badge_items_with_dividers.append({
-                            'component': 'div',
-                            'props': {
-                                'class': 'ma-1 pa-1 d-flex flex-column align-center',
-                                'style': 'width: 90px; text-align: center;',
-                                'title': badge.get('description', '无描述')
-                            },
+                            'component': 'VTooltip',
+                            'props': {'location': 'top'},
                             'content': [
                                 {
-                                    'component': 'VImg' if badge.get('image') else 'VIcon',
-                                    'props': ({
-                                        'src': badge.get('image'), 'height': '48', 'width': '48', 'class': 'mb-1'
-                                    } if badge.get('image') else {
-                                        'icon': self._map_fa_to_mdi(badge.get('icon')), 'size': '48', 'class': 'mb-1'
-                                    })
+                                    'component': 'template',
+                                    'props': {'v-slot:activator': '{ props }'},
+                                    'content': [
+                                        {
+                                            'component': 'div',
+                                            'props': {
+                                                'v-bind': 'props',
+                                                'class': 'ma-1 pa-1 d-flex flex-column align-center',
+                                                'style': 'width: 90px; text-align: center; cursor: pointer;',
+                                            },
+                                            'content': [
+                                                {
+                                                    'component': 'VImg' if badge.get('image') else 'VIcon',
+                                                    'props': ({
+                                                        'src': badge.get('image'), 'height': '48', 'width': '48', 'class': 'mb-1'
+                                                    } if badge.get('image') else {
+                                                        'icon': self._map_fa_to_mdi(badge.get('icon')), 'size': '48', 'class': 'mb-1'
+                                                    })
+                                                },
+                                                {
+                                                    'component': 'div',
+                                                    'props': {'class': 'text-caption text-truncate', 'style': 'max-width: 90px; line-height: 20px; font-weight: 500;'},
+                                                    'text': badge.get('name', '未知徽章')
+                                                }
+                                            ]
+                                        }
+                                    ]
                                 },
                                 {
                                     'component': 'div',
-                                    'props': {'class': 'marquee-text-wrapper', 'style': 'width: 100%; height: 20px;'},
-                                    'content': [{'component': 'div', 'props': {'class': 'text-caption marquee-text', 'style': 'line-height: 20px; font-weight: 500;'}, 'text': badge.get('name', '未知徽章')}]
+                                    'content': [
+                                        {'component': 'div', 'props': {'class': 'font-weight-bold'}, 'text': badge.get('name', '未知徽章')},
+                                        {'component': 'div', 'text': badge.get('description', '无描述')}
+                                    ]
                                 }
                             ]
                         })
@@ -1009,7 +1056,28 @@ class FengchaoSignin(_PluginBase):
                     'props': {'class': 'd-flex flex-wrap'},
                     'content': all_category_cards
                 })
-
+            
+            # 未读消息提示
+            username_display_content = [
+                {'component': 'div', 'props': {'class': 'text-h6 mb-1 pa-2 d-inline-block elevation-2', 'style': frost_style}, 'text': username}
+            ]
+            if unread_notifications > 0:
+                username_display_content.append({
+                    'component': 'VBadge',
+                    'props': {
+                        'color': 'red',
+                        'content': str(unread_notifications),
+                        'inline': True,
+                        'class': 'ml-2'
+                    },
+                    'content': [
+                        {
+                            'component': 'VIcon',
+                            'props': {'color': 'white'},
+                            'text': 'mdi-bell'
+                        }
+                    ]
+                })
 
             user_info_card = {
                 'component': 'VCard',
@@ -1025,7 +1093,7 @@ class FengchaoSignin(_PluginBase):
                                         {'component': 'div', 'props': {'style': f"position: absolute; top: 0; left: 0; width: 90px; height: 90px; background-image: url('{user_attrs.get('decorationAvatarFrame', '')}'); background-size: contain; background-repeat: no-repeat; background-position: center; z-index: 2;"}} if user_attrs.get('decorationAvatarFrame') else {}
                                     ]},
                                     {'component': 'div', 'content': [
-                                        {'component': 'div', 'props': {'class': 'text-h6 mb-1 pa-2 d-inline-block elevation-2', 'style': frost_style}, 'text': username},
+                                        {'component': 'div', 'props': {'class': 'd-flex align-center'}, 'content': username_display_content},
                                         {'component': 'div', 'props': {'class': 'd-flex flex-wrap mt-1'}, 'content': [
                                             {'component': 'VChip', 'props': {'style': f"background-color: {group.get('color', '#6B7CA8')}; color: white;", 'size': 'small', 'class': 'mr-1 mb-1', 'variant': 'elevated'}, 'content': [
                                                 {'component': 'VIcon', 'props': {'start': True, 'size': 'small'}, 'text': group.get('icon')},
@@ -1044,6 +1112,14 @@ class FengchaoSignin(_PluginBase):
                                             {'component': 'VIcon', 'props': {'style': 'color: #2196F3;', 'size': 'x-small', 'class': 'mr-1'}, 'text': 'mdi-clock-outline'},
                                             {'component': 'span', 'text': f'最后访问 {last_seen_at}'}
                                         ]}]},
+                                        {'component': 'div', 'props': {'class': 'pa-1 elevation-2 mb-1', 'style': f'{frost_style} width: fit-content;'}, 'content': [{'component': 'div', 'props': {'class': 'd-flex align-center text-caption'}, 'content': [
+                                            {'component': 'VIcon', 'props': {'style': 'color: #FF9800;', 'size': 'x-small', 'class': 'mr-1'}, 'text': 'mdi-update'},
+                                            {'component': 'span', 'text': f'数据更新于 {user_info_updated_at}'}
+                                        ]}]} if user_info_updated_at else {},
+                                        {'component': 'div', 'props': {'class': 'pa-1 elevation-2 mb-1', 'style': f'{frost_style} width: fit-content;'}, 'content': [{'component': 'div', 'props': {'class': 'd-flex align-center text-caption'}, 'content': [
+                                            {'component': 'VIcon', 'props': {'style': 'color: #9C27B0;', 'size': 'x-small', 'class': 'mr-1'}, 'text': 'mdi-chart-box-outline'},
+                                            {'component': 'span', 'text': f'PT人生更新于 {pt_life_updated_at}'}
+                                        ]}]} if pt_life_updated_at else {},
                                         {'component': 'div', 'props': {'class': 'pa-1 elevation-2', 'style': f'{frost_style} width: fit-content;'}, 'content': [{'component': 'div', 'props': {'class': 'd-flex align-center text-caption'}, 'content': [
                                             {'component': 'VIcon', 'props': {'style': 'color: #E64A19;', 'size': 'x-small', 'class': 'mr-1'}, 'text': 'mdi-medal-outline'},
                                             {'component': 'span', 'text': f'拥有 {badge_count} 枚徽章'}
@@ -1053,42 +1129,42 @@ class FengchaoSignin(_PluginBase):
                             ]},
                             {'component': 'VCol', 'props': {'cols': 12, 'md': 7}, 'content': [
                                 {'component': 'VRow', 'content': [
-                                    {'component': 'VCol', 'props': {'cols': 6, 'md': 4}, 'content': [{'component': 'div', 'props': {'class': 'text-center pa-2 elevation-2', 'style': frost_style}, 'content': [
+                                    {'component': 'VCol', 'props': {'cols': 6, 'sm': 4}, 'content': [{'component': 'div', 'props': {'class': 'text-center pa-2 elevation-2', 'style': frost_style}, 'content': [
                                         {'component': 'div', 'props': {'class': 'd-flex justify-center align-center'}, 'content': [
                                             {'component': 'VIcon', 'props': {'style': 'color: #FFC107;', 'class': 'mr-1'}, 'text': 'mdi-flower'},
                                             {'component': 'span', 'props': {'class': 'text-h6'}, 'text': str(money)}
                                         ]},
                                         {'component': 'div', 'props': {'class': 'text-caption mt-1'}, 'text': '花粉'}
                                     ]}]},
-                                    {'component': 'VCol', 'props': {'cols': 6, 'md': 4}, 'content': [{'component': 'div', 'props': {'class': 'text-center pa-2 elevation-2', 'style': frost_style}, 'content': [
+                                    {'component': 'VCol', 'props': {'cols': 6, 'sm': 4}, 'content': [{'component': 'div', 'props': {'class': 'text-center pa-2 elevation-2', 'style': frost_style}, 'content': [
                                         {'component': 'div', 'props': {'class': 'd-flex justify-center align-center'}, 'content': [
                                             {'component': 'VIcon', 'props': {'style': 'color: #3F51B5;', 'class': 'mr-1'}, 'text': 'mdi-forum'},
                                             {'component': 'span', 'props': {'class': 'text-h6'}, 'text': str(discussion_count)}
                                         ]},
                                         {'component': 'div', 'props': {'class': 'text-caption mt-1'}, 'text': '主题'}
                                     ]}]},
-                                    {'component': 'VCol', 'props': {'cols': 6, 'md': 4}, 'content': [{'component': 'div', 'props': {'class': 'text-center pa-2 elevation-2', 'style': frost_style}, 'content': [
+                                    {'component': 'VCol', 'props': {'cols': 6, 'sm': 4}, 'content': [{'component': 'div', 'props': {'class': 'text-center pa-2 elevation-2', 'style': frost_style}, 'content': [
                                         {'component': 'div', 'props': {'class': 'd-flex justify-center align-center'}, 'content': [
                                             {'component': 'VIcon', 'props': {'style': 'color: #00BCD4;', 'class': 'mr-1'}, 'text': 'mdi-comment-text-multiple'},
                                             {'component': 'span', 'props': {'class': 'text-h6'}, 'text': str(comment_count)}
                                         ]},
                                         {'component': 'div', 'props': {'class': 'text-caption mt-1'}, 'text': '评论'}
                                     ]}]},
-                                    {'component': 'VCol', 'props': {'cols': 6, 'md': 4}, 'content': [{'component': 'div', 'props': {'class': 'text-center pa-2 elevation-2', 'style': frost_style}, 'content': [
+                                    {'component': 'VCol', 'props': {'cols': 6, 'sm': 4}, 'content': [{'component': 'div', 'props': {'class': 'text-center pa-2 elevation-2', 'style': frost_style}, 'content': [
                                         {'component': 'div', 'props': {'class': 'd-flex justify-center align-center'}, 'content': [
                                             {'component': 'VIcon', 'props': {'style': 'color: #673AB7;', 'class': 'mr-1'}, 'text': 'mdi-account-group'},
                                             {'component': 'span', 'props': {'class': 'text-h6'}, 'text': str(follower_count)}
                                         ]},
                                         {'component': 'div', 'props': {'class': 'text-caption mt-1'}, 'text': '粉丝'}
                                     ]}]},
-                                    {'component': 'VCol', 'props': {'cols': 6, 'md': 4}, 'content': [{'component': 'div', 'props': {'class': 'text-center pa-2 elevation-2', 'style': frost_style}, 'content': [
+                                    {'component': 'VCol', 'props': {'cols': 6, 'sm': 4}, 'content': [{'component': 'div', 'props': {'class': 'text-center pa-2 elevation-2', 'style': frost_style}, 'content': [
                                         {'component': 'div', 'props': {'class': 'd-flex justify-center align-center'}, 'content': [
                                             {'component': 'VIcon', 'props': {'style': 'color: #03A9F4;', 'class': 'mr-1'}, 'text': 'mdi-account-multiple-plus'},
                                             {'component': 'span', 'props': {'class': 'text-h6'}, 'text': str(following_count)}
                                         ]},
                                         {'component': 'div', 'props': {'class': 'text-caption mt-1'}, 'text': '关注'}
                                     ]}]},
-                                    {'component': 'VCol', 'props': {'cols': 6, 'md': 4}, 'content': [{'component': 'div', 'props': {'class': 'text-center pa-2 elevation-2', 'style': frost_style}, 'content': [
+                                    {'component': 'VCol', 'props': {'cols': 6, 'sm': 4}, 'content': [{'component': 'div', 'props': {'class': 'text-center pa-2 elevation-2', 'style': frost_style}, 'content': [
                                         {'component': 'div', 'props': {'class': 'd-flex justify-center align-center'}, 'content': [
                                             {'component': 'VIcon', 'props': {'style': 'color: #009688;', 'class': 'mr-1'}, 'text': 'mdi-calendar-check'},
                                             {'component': 'span', 'props': {'class': 'text-h6'}, 'text': str(total_continuous_checkin)}
@@ -1140,6 +1216,7 @@ class FengchaoSignin(_PluginBase):
             status_color = status_colors.get(status_text, "#9E9E9E")
             status_icon = status_icons.get(status_text, "mdi-help-circle")
             money_text = self._format_pollen(record.get('money'))
+            failure_count_text = str(record.get('failure_count', '—')) if status_text == "签到失败" else "—"
 
             history_rows.append({
                 'component': 'tr',
@@ -1152,7 +1229,7 @@ class FengchaoSignin(_PluginBase):
                         ]},
                         {'component': 'div', 'props': {'class': 'mt-1 text-caption grey--text'}, 'text': f"将在{record.get('retry', {}).get('interval', self._retry_interval)}小时后重试 ({record.get('retry', {}).get('current', 0)}/{record.get('retry', {}).get('max', self._retry_count)})" if status_text == "签到失败" and record.get('retry', {}).get('enabled', False) and record.get('retry', {}).get('current', 0) > 0 else ""}
                     ]},
-                    {'component': 'td', 'text': str(record.get('failure_count', '—'))},
+                    {'component': 'td', 'text': failure_count_text},
                     {'component': 'td', 'content': [{'component': 'div', 'props': {'class': 'd-flex align-center'}, 'content': [
                         {'component': 'VIcon', 'props': {'style': 'color: #FFC107;', 'class': 'mr-1'}, 'text': 'mdi-flower'},
                         {'component': 'span', 'text': money_text}
@@ -1163,7 +1240,7 @@ class FengchaoSignin(_PluginBase):
                     ]}]},
                     {'component': 'td', 'content': [{'component': 'div', 'props': {'class': 'd-flex align-center'}, 'content': [
                         {'component': 'VIcon', 'props': {'style': 'color: #FF8F00;', 'class': 'mr-1'}, 'text': 'mdi-gift'},
-                        {'component': 'span', 'text': f"{self._format_pollen(record.get('lastCheckinMoney', 0))}花粉" if ("签到成功" in status_text or "已签到" in status_text) and record.get('lastCheckinMoney', 0) > 0 else '—'}
+                        {'component': 'span', 'text': f"{self._format_pollen(record.get('lastCheckinMoney', 0))}花粉" if ("签到成功" in status_text) and record.get('lastCheckinMoney', 0) > 0 else '—'}
                     ]}]}
                 ]
             })
@@ -1174,7 +1251,7 @@ class FengchaoSignin(_PluginBase):
         components.append({
             'component': 'VCard', 'props': {'variant': 'outlined', 'class': 'mb-4'}, 'content': [
                 {'component': 'VCardTitle', 'props': {'class': 'd-flex align-center'}, 'content': [
-                    {'component': 'VIcon', 'props': {'style': 'color: #9C27B0;', 'class': 'mr-2'}, 'text': 'mdi-calendar-check'},
+                    {'component': 'VIcon', 'props': {'style': 'color: #9C27B0;', 'class': 'mr-2'}, 'text': 'mdi-history'},
                     {'component': 'span', 'props': {'class': 'text-h6 font-weight-bold'}, 'text': '蜂巢签到历史'},
                     {'component': 'VSpacer'},
                     {'component': 'VChip', 'props': {'style': 'background-color: #FF9800; color: white;', 'size': 'small', 'variant': 'elevated'}, 'content': [
@@ -1183,13 +1260,15 @@ class FengchaoSignin(_PluginBase):
                     ]}
                 ]},
                 {'component': 'VDivider'},
-                {'component': 'VCardText', 'props': {'class': 'pa-2'}, 'content': [
-                    {'component': 'VTable', 'props': {'hover': True, 'density': 'comfortable'}, 'content': [
-                        {'component': 'thead', 'content': [{'component': 'tr', 'content': [
-                            {'component': 'th', 'text': '时间'}, {'component': 'th', 'text': '状态'}, {'component': 'th', 'text': '失败次数'},
-                            {'component': 'th', 'text': '花粉'}, {'component': 'th', 'text': '签到天数'}, {'component': 'th', 'text': '奖励'}
-                        ]}]},
-                        {'component': 'tbody', 'content': history_rows}
+                {'component': 'VCardText', 'props': {'class': 'pa-0 pa-md-2'}, 'content': [
+                    {'component': 'VResponsive', 'content': [
+                        {'component': 'VTable', 'props': {'hover': True, 'density': 'comfortable'}, 'content': [
+                            {'component': 'thead', 'content': [{'component': 'tr', 'content': [
+                                {'component': 'th', 'text': '时间'}, {'component': 'th', 'text': '状态'}, {'component': 'th', 'text': '失败次数'},
+                                {'component': 'th', 'text': '花粉'}, {'component': 'th', 'text': '签到天数'}, {'component': 'th', 'text': '奖励'}
+                            ]}]},
+                            {'component': 'tbody', 'content': history_rows}
+                        ]}
                     ]}
                 ]}
             ]
@@ -1197,21 +1276,8 @@ class FengchaoSignin(_PluginBase):
         components.append({
             'component': 'style',
             'text': """
-                .v-table { border-radius: 8px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+                .v-table { border-radius: 8px; overflow: hidden; }
                 .v-table th { background-color: rgba(var(--v-theme-primary), 0.05); color: rgb(var(--v-theme-primary)); font-weight: 600; }
-                .marquee-text-wrapper { display: flex; justify-content: center; align-items: center; overflow: hidden; }
-                .marquee-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; text-align: center; }
-                .marquee-text-wrapper:hover .marquee-text {
-                    max-width: none;
-                    overflow: visible;
-                    text-overflow: clip;
-                    animation: slide-to-reveal 5s ease-in-out;
-                }
-                @keyframes slide-to-reveal {
-                    0% { transform: translateX(0); }
-                    40%, 60% { transform: translateX(calc(90px - 100% - 16px)); }
-                    100% { transform: translateX(0); }
-                }
                 """
         })
         return components
