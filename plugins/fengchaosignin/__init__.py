@@ -249,7 +249,7 @@ class FengchaoSignin(_PluginBase):
                 if not cookie:
                     if attempt < max_retries: continue
                     raise Exception("登录失败，无法获取cookie")
-                
+
                 try:
                     res = RequestUtils(cookies=cookie, proxies=self._get_proxies(), timeout=30).get_res(url="https://pting.club")
                 except Exception as e:
@@ -277,7 +277,7 @@ class FengchaoSignin(_PluginBase):
 
                 headers = {"X-Csrf-Token": csrfToken, "X-Http-Method-Override": "PATCH", "Cookie": cookie}
                 data = {"data": {"type": "users", "attributes": {"canCheckin": False}, "id": userId}}
-                
+
                 try:
                     res_signin = RequestUtils(headers=headers, proxies=self._get_proxies(), timeout=30).post_res(url=f"https://pting.club/api/users/{userId}", json=data)
                 except Exception as e:
@@ -306,9 +306,9 @@ class FengchaoSignin(_PluginBase):
                                           text=(f"📢 执行结果\n━━━━━━━━━━\n🕐 时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
                                                 f"✨ 状态：{status_text}\n🎁 奖励：{reward_text}\n━━━━━━━━━━\n"
                                                 f"📊 积分统计\n🌸 花粉：{money}\n📆 签到天数：{totalContinuousCheckIn}\n━━━━━━━━━━"))
-                
+
                 self._save_history({"date": datetime.now().strftime('%Y-%m-%d %H:%M:%S'), "status": status_text, "money": money, "totalContinuousCheckIn": totalContinuousCheckIn, "lastCheckinMoney": lastCheckinMoney, "failure_count": 0})
-                
+
                 if self._current_retry > 0:
                     self._current_retry = 0
                 return True
@@ -330,9 +330,9 @@ class FengchaoSignin(_PluginBase):
         history = self.get_data('history') or []
         today_str = date.today().strftime('%Y-%m-%d')
         last_today_index = next((i for i in range(len(history) - 1, -1, -1) if history[i].get("date", "").startswith(today_str)), -1)
-        
+
         is_new_success = "成功" in record.get("status", "") or "已签到" in record.get("status", "")
-        
+
         if last_today_index != -1:
             last_record = history[last_today_index]
             is_last_success = "成功" in last_record.get("status", "") or "已签到" in last_record.get("status", "")
@@ -461,14 +461,14 @@ class FengchaoSignin(_PluginBase):
             except: last_seen_at = '未知'
 
             groups = [{'name': item['attributes'].get('nameSingular', ''), 'color': item['attributes'].get('color', '#888'), 'icon': self._map_fa_to_mdi(item['attributes'].get('icon', ''))} for item in user_info.get('included', []) if item.get('type') == 'groups']
-            
+
             badges = []
             for badge_item in user_attrs.get('badges', []):
                 core_badge_info = badge_item.get('badge', {})
                 if not core_badge_info: continue
                 badges.append({'name': core_badge_info.get('name', '未知徽章'), 'icon': core_badge_info.get('icon', 'fas fa-award'), 'description': core_badge_info.get('description', '无描述'), 'image': core_badge_info.get('image'), 'category': core_badge_info.get('category', {}).get('name', '其他')})
             badge_count = len(badges)
-            
+
             categorized_badges = defaultdict(list)
             for badge in badges: categorized_badges[badge['category']].append(badge)
 
@@ -479,7 +479,7 @@ class FengchaoSignin(_PluginBase):
                     badge_items = []
                     for badge in badge_list:
                         badge_items.append({'component': 'div', 'props': {'class': 'ma-1 pa-1 d-flex flex-column align-center', 'style': 'width: 90px; text-align: center;', 'title': f"{badge.get('name', '未知徽章')}\n\n{badge.get('description', '无描述')}"}, 'content': [{'component': 'VImg' if badge.get('image') else 'VIcon', 'props': ({'src': badge.get('image'), 'height': '48', 'width': '48', 'class': 'mb-1'} if badge.get('image') else {'icon': self._map_fa_to_mdi(badge.get('icon')), 'size': '48', 'class': 'mb-1'})}, {'component': 'div', 'props': {'class': 'text-caption text-truncate', 'style': 'max-width: 90px; line-height: 20px; font-weight: 500;'}, 'text': badge.get('name', '未知徽章')}]})
-                    
+
                     badge_items_with_dividers = []
                     for i, item in enumerate(badge_items):
                         badge_items_with_dividers.append(item)
@@ -488,11 +488,11 @@ class FengchaoSignin(_PluginBase):
 
                     all_category_cards.append({'component': 'div', 'props': {'class': 'ma-1 pa-2', 'style': f'{frost_style} border-radius: 12px;'}, 'content': [{'component': 'div', 'props': {'class': 'text-subtitle-2 grey--text text--darken-1', 'style': 'text-align: center;'}, 'text': category_name}, {'component': 'VDivider', 'props': {'class': 'my-1'}}, {'component': 'div', 'props': {'class': 'd-flex flex-wrap justify-center align-center'}, 'content': badge_items_with_dividers}]})
                 badge_category_components.append({'component': 'div', 'props': {'class': 'd-flex flex-wrap'}, 'content': all_category_cards})
-            
+
             username_display_content = [{'component': 'div', 'props': {'class': 'text-h6 mb-1 pa-2 d-inline-block elevation-2', 'style': frost_style}, 'text': username}]
             if unread_notifications > 0:
                 username_display_content.append({'component': 'VBadge', 'props': {'color': 'red', 'content': str(unread_notifications), 'inline': True, 'class': 'ml-2'}, 'content': [{'component': 'VIcon', 'props': {'color': 'white'}, 'text': 'mdi-bell'}]})
-            
+
             footer_texts = [f'最后签到: {last_checkin_time}']
             if user_info_updated_at: footer_texts.append(f'数据更新: {user_info_updated_at}')
             if pt_life_updated_at: footer_texts.append(f'PT人生更新: {pt_life_updated_at}')
@@ -505,7 +505,7 @@ class FengchaoSignin(_PluginBase):
                 ('关注', str(following_count), 'mdi-account-multiple-plus', '#03A9F4'), ('连续签到', str(total_continuous_checkin), 'mdi-calendar-check', '#009688')]
             for title, value, icon, color in stats_items:
                 stats_grid.append({'component': 'VCol', 'props': {'cols': 6, 'sm': 4}, 'content': [{'component': 'div', 'props': {'class': 'text-center pa-2 elevation-2', 'style': frost_style}, 'content': [{'component': 'div', 'props': {'class': 'd-flex justify-center align-center'}, 'content': [{'component': 'VIcon', 'props': {'style': f'color: {color};', 'class': 'mr-1'}, 'text': icon}, {'component': 'span', 'props': {'class': 'text-h6'}, 'text': value}]}, {'component': 'div', 'props': {'class': 'text-caption mt-1'}, 'text': title}]}]})
-            
+
             user_info_card = {'component': 'VCard', 'props': {'variant': 'outlined', 'class': 'mb-4', 'style': f"background-image: url('{background_image}'); background-size: cover; background-position: center;" if background_image else ''}, 'content': [
                 {'component': 'VDivider'}, {'component': 'VCardText', 'content': [
                     {'component': 'VRow', 'props': {'class': 'ma-1'}, 'content': [
@@ -539,7 +539,7 @@ class FengchaoSignin(_PluginBase):
         history_rows = []
         status_colors = {"签到成功": "#4CAF50", "已签到": "#2196F3", "签到失败": "#F44336"}
         status_icons = {"签到成功": "mdi-check-circle", "已签到": "mdi-information-outline", "签到失败": "mdi-close-circle"}
-        
+
         for record in history:
             status_text = record.get("status", "未知")
             failure_count_text = str(record.get('failure_count', '—')) if status_text == "签到失败" else "—"
@@ -559,7 +559,7 @@ class FengchaoSignin(_PluginBase):
                 {'component': 'VCardText', 'props': {'class': 'pa-0 pa-md-2'}, 'content': [{'component': 'VResponsive', 'content': [{'component': 'VTable', 'props': {'hover': True, 'density': 'comfortable'}, 'content': [{'component': 'thead', 'content': [{'component': 'tr', 'content': [{'component': 'th', 'text': '时间'}, {'component': 'th', 'text': '状态'}, {'component': 'th', 'text': '失败次数'}, {'component': 'th', 'text': '花粉'}, {'component': 'th', 'text': '签到天数'}, {'component': 'th', 'text': '奖励'}]}]}, {'component': 'tbody', 'content': history_rows}]}]}]}]})
         components.append({'component': 'style', 'text': """.v-table { border-radius: 8px; overflow: hidden; } .v-table th { background-color: rgba(var(--v-theme-primary), 0.05); color: rgb(var(--v-theme-primary)); font-weight: 600; }"""})
         return components
-    
+
     def stop_service(self):
         try:
             if self._scheduler and self._scheduler.running:
@@ -576,7 +576,7 @@ class FengchaoSignin(_PluginBase):
             now = datetime.now()
             if self._last_push_time and (now - datetime.strptime(self._last_push_time, '%Y-%m-%d %H:%M:%S')).days < self._mp_push_interval:
                 return
-            
+
             logger.info("开始更新蜂巢论坛PT人生数据...")
             cookie = self._login_and_get_cookie()
             if not cookie:
@@ -591,11 +591,11 @@ class FengchaoSignin(_PluginBase):
             csrf_token = (re.findall(r'"csrfToken":"(.*?)"', res.text) or [None])[0]
             user_match = re.search(r'"userId":(\d+)', res.text)
             user_id = user_match.group(1) if user_match else None
-            
+
             if not csrf_token or not user_id:
                 logger.error("PT人生更新失败: 无法获取CSRF或UserID")
                 return
-            
+
             self.__push_mp_stats(user_id=user_id, csrf_token=csrf_token, cookie=cookie)
         finally:
             self._pushing_stats = False
@@ -605,7 +605,7 @@ class FengchaoSignin(_PluginBase):
             try:
                 now = datetime.now()
                 logger.info(f"开始获取站点统计数据以更新蜂巢论坛PT人生数据 (用户ID: {user_id})")
-                
+
                 stats_data = self._get_site_statistics()
                 if not stats_data:
                     raise Exception("获取站点统计数据失败")
@@ -619,12 +619,12 @@ class FengchaoSignin(_PluginBase):
                     logger.warning(f"站点数据过多({len(sites)}个)，将只推送做种数最多的前300个站点")
                     sites.sort(key=lambda x: x.get("seeding", 0), reverse=True)
                     formatted_stats["sites"] = sites[:300]
-                
+
                 headers = {"X-Csrf-Token": csrf_token, "X-Http-Method-Override": "PATCH", "Content-Type": "application/json", "Cookie": cookie}
                 data = {"data": {"type": "users", "attributes": {"mpStatsSummary": json.dumps(formatted_stats.get("summary", {})), "mpStatsSites": json.dumps(formatted_stats.get("sites", []))}, "id": user_id}}
                 proxies = self._get_proxies()
                 url = f"https://pting.club/api/users/{user_id}"
-                
+
                 logger.info(f"准备更新蜂巢论坛PT人生数据: {len(sites)} 个站点")
                 res = RequestUtils(headers=headers, proxies=proxies, timeout=60).post_res(url=url, json=data)
 
@@ -652,7 +652,7 @@ class FengchaoSignin(_PluginBase):
             if not raw_data_list:
                 logger.error("通过SiteOper未获取到站点数据")
                 return self._get_site_statistics_via_api()
-            
+
             data_dict = {f"{d.updated_day}_{d.name}": d for d in raw_data_list}
             latest_site_data = []
             seen_sites = set()
@@ -660,7 +660,7 @@ class FengchaoSignin(_PluginBase):
                 if data.name not in seen_sites:
                     latest_site_data.append(data.to_dict())
                     seen_sites.add(data.name)
-            
+
             from app.helper.sites import SitesHelper
             managed_site_names = {s["name"] for s in SitesHelper().get_indexers() if s.get("name")}
             sites = [s for s in latest_site_data if s.get("name") in managed_site_names]
@@ -730,14 +730,14 @@ class FengchaoSignin(_PluginBase):
             csrf_token = (re.findall(r'"csrfToken":"(.*?)"', res.text) or [None])[0]
             session_cookie_match = re.search(r'flarum_session=([^;]+)', res.headers.get('set-cookie', ''))
             session_cookie = session_cookie_match.group(1) if session_cookie_match else None
-            
+
             if not csrf_token or not session_cookie:
                 logger.error("登录失败: 无法获取CSRF令牌或Session Cookie")
                 return None
 
             login_data = {"identification": self._username, "password": self._password, "remember": True}
             login_headers = {"Content-Type": "application/json", "X-CSRF-Token": csrf_token, "Cookie": f"flarum_session={session_cookie}"}
-            
+
             login_res = req.post_res(url="https://pting.club/login", json=login_data, headers=login_headers)
             if not login_res or login_res.status_code != 200:
                 logger.error(f"登录失败: 登录请求失败，状态码: {login_res.status_code if login_res else 'N/A'}")
@@ -746,7 +746,7 @@ class FengchaoSignin(_PluginBase):
             set_cookie_header = login_res.headers.get('set-cookie', '')
             new_session_match = re.search(r'flarum_session=([^;]+)', set_cookie_header)
             cookie_dict = {'flarum_session': new_session_match.group(1) if new_session_match else session_cookie}
-            
+
             if remember_match := re.search(r'flarum_remember=([^;]+)', set_cookie_header):
                 cookie_dict['flarum_remember'] = remember_match.group(1)
 
