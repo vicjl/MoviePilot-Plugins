@@ -24,7 +24,7 @@ class FengchaoSignin(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/madrays/MoviePilot-Plugins/main/icons/fengchao.png"
     # 插件版本
-    plugin_version = "1.2.8"
+    plugin_version = "1.2.9"
     # 插件作者
     plugin_author = "madrays"
     # 作者主页
@@ -957,9 +957,11 @@ class FengchaoSignin(_PluginBase):
             categorized_badges = defaultdict(list)
             for badge in badges:
                 categorized_badges[badge.get('category', '其他')].append(badge)
-
+            
+            # This will contain a single div wrapper for all categories
             badge_category_components = []
             if categorized_badges:
+                all_category_cards = []
                 for category_name, badge_list in sorted(categorized_badges.items()):
                     badge_items_with_dividers = []
                     for i, badge in enumerate(badge_list):
@@ -982,14 +984,7 @@ class FengchaoSignin(_PluginBase):
                                 {
                                     'component': 'div',
                                     'props': {'class': 'marquee-text-wrapper', 'style': 'width: 100%; height: 20px;'},
-                                    'content': [{
-                                        'component': 'div',
-                                        'props': {
-                                            'class': 'text-caption marquee-text',
-                                            'style': 'line-height: 20px; font-weight: 500;'
-                                        },
-                                        'text': badge.get('name', '未知徽章')
-                                    }]
+                                    'content': [{'component': 'div', 'props': {'class': 'text-caption marquee-text', 'style': 'line-height: 20px; font-weight: 500;'}, 'text': badge.get('name', '未知徽章')}]
                                 }
                             ]
                         })
@@ -999,19 +994,22 @@ class FengchaoSignin(_PluginBase):
                                 'props': {'vertical': True, 'class': 'my-2'}
                             })
                     
-                    badge_category_components.append({
+                    all_category_cards.append({
                         'component': 'div',
-                        'props': {'class': 'd-flex flex-wrap'},
-                        'content': [{
-                            'component': 'div',
-                            'props': {'class': 'ma-1 pa-2', 'style': f'{frost_style} border-radius: 12px;'},
-                            'content': [
-                                {'component': 'div', 'props': {'class': 'text-subtitle-2 grey--text text--darken-1', 'style': 'text-align: center;'}, 'text': category_name},
-                                {'component': 'VDivider', 'props': {'class': 'my-1'}},
-                                {'component': 'div', 'props': {'class': 'd-flex flex-wrap justify-center align-center'}, 'content': badge_items_with_dividers}
-                            ]
-                        }]
+                        'props': {'class': 'ma-1 pa-2', 'style': f'{frost_style} border-radius: 12px;'},
+                        'content': [
+                            {'component': 'div', 'props': {'class': 'text-subtitle-2 grey--text text--darken-1', 'style': 'text-align: center;'}, 'text': category_name},
+                            {'component': 'VDivider', 'props': {'class': 'my-1'}},
+                            {'component': 'div', 'props': {'class': 'd-flex flex-wrap justify-center align-center'}, 'content': badge_items_with_dividers}
+                        ]
                     })
+                
+                badge_category_components.append({
+                    'component': 'div',
+                    'props': {'class': 'd-flex flex-wrap'},
+                    'content': all_category_cards
+                })
+
 
             user_info_card = {
                 'component': 'VCard',
@@ -1202,16 +1200,17 @@ class FengchaoSignin(_PluginBase):
                 .v-table { border-radius: 8px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
                 .v-table th { background-color: rgba(var(--v-theme-primary), 0.05); color: rgb(var(--v-theme-primary)); font-weight: 600; }
                 .marquee-text-wrapper { display: flex; justify-content: center; align-items: center; overflow: hidden; }
-                .marquee-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+                .marquee-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; text-align: center; }
                 .marquee-text-wrapper:hover .marquee-text {
                     max-width: none;
                     overflow: visible;
                     text-overflow: clip;
-                    animation: marquee-scroll 10s linear infinite;
+                    animation: slide-to-reveal 5s ease-in-out;
                 }
-                @keyframes marquee-scroll {
-                    0% { transform: translateX(100%); }
-                    100% { transform: translateX(-100%); }
+                @keyframes slide-to-reveal {
+                    0% { transform: translateX(0); }
+                    40%, 60% { transform: translateX(calc(90px - 100% - 16px)); }
+                    100% { transform: translateX(0); }
                 }
                 """
         })
