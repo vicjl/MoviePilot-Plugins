@@ -24,7 +24,7 @@ class FengchaoSignin(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/madrays/MoviePilot-Plugins/main/icons/fengchao.png"
     # 插件版本
-    plugin_version = "1.3.0"
+    plugin_version = "1.3.1"
     # 插件作者
     plugin_author = "madrays & Gemini"
     # 作者主页
@@ -361,6 +361,10 @@ class FengchaoSignin(_PluginBase):
                         continue
                     raise Exception("无法连接到站点")
 
+                # 签到前检查状态
+                can_checkin_before = '"canCheckin":true' in res.text
+                logger.info(f"签到前状态检查: canCheckin -> {can_checkin_before}")
+
                 # 获取csrfToken
                 pattern = r'"csrfToken":"(.*?)"'
                 csrfToken = re.findall(pattern, res.text)
@@ -438,8 +442,8 @@ class FengchaoSignin(_PluginBase):
                 totalContinuousCheckIn = sign_dict['data']['attributes']['totalContinuousCheckIn']
                 lastCheckinMoney = sign_dict['data']['attributes'].get('lastCheckinMoney', 0)
 
-                # 区分 签到成功 和 已签到
-                if lastCheckinMoney > 0:
+                # 根据签到前的状态来判断
+                if can_checkin_before:
                     status_text = "签到成功"
                     reward_text = f"获得{lastCheckinMoney}花粉奖励"
                     logger.info(f"蜂巢签到成功，获得{lastCheckinMoney}花粉，当前花粉: {money}，累计签到: {totalContinuousCheckIn}")
@@ -994,44 +998,25 @@ class FengchaoSignin(_PluginBase):
                     badge_items_with_dividers = []
                     for i, badge in enumerate(badge_list):
                         badge_items_with_dividers.append({
-                            'component': 'VTooltip',
-                            'props': {'location': 'top'},
+                            'component': 'div',
+                            'props': {
+                                'class': 'ma-1 pa-1 d-flex flex-column align-center',
+                                'style': 'width: 90px; text-align: center;',
+                                'title': f"{badge.get('name', '未知徽章')}\n\n{badge.get('description', '无描述')}"
+                            },
                             'content': [
                                 {
-                                    'component': 'template',
-                                    'props': {'v-slot:activator': '{ props }'},
-                                    'content': [
-                                        {
-                                            'component': 'div',
-                                            'props': {
-                                                'v-bind': 'props',
-                                                'class': 'ma-1 pa-1 d-flex flex-column align-center',
-                                                'style': 'width: 90px; text-align: center; cursor: pointer;',
-                                            },
-                                            'content': [
-                                                {
-                                                    'component': 'VImg' if badge.get('image') else 'VIcon',
-                                                    'props': ({
-                                                        'src': badge.get('image'), 'height': '48', 'width': '48', 'class': 'mb-1'
-                                                    } if badge.get('image') else {
-                                                        'icon': self._map_fa_to_mdi(badge.get('icon')), 'size': '48', 'class': 'mb-1'
-                                                    })
-                                                },
-                                                {
-                                                    'component': 'div',
-                                                    'props': {'class': 'text-caption text-truncate', 'style': 'max-width: 90px; line-height: 20px; font-weight: 500;'},
-                                                    'text': badge.get('name', '未知徽章')
-                                                }
-                                            ]
-                                        }
-                                    ]
+                                    'component': 'VImg' if badge.get('image') else 'VIcon',
+                                    'props': ({
+                                        'src': badge.get('image'), 'height': '48', 'width': '48', 'class': 'mb-1'
+                                    } if badge.get('image') else {
+                                        'icon': self._map_fa_to_mdi(badge.get('icon')), 'size': '48', 'class': 'mb-1'
+                                    })
                                 },
                                 {
                                     'component': 'div',
-                                    'content': [
-                                        {'component': 'div', 'props': {'class': 'font-weight-bold'}, 'text': badge.get('name', '未知徽章')},
-                                        {'component': 'div', 'text': badge.get('description', '无描述')}
-                                    ]
+                                    'props': {'class': 'text-caption text-truncate', 'style': 'max-width: 90px; line-height: 20px; font-weight: 500;'},
+                                    'text': badge.get('name', '未知徽章')
                                 }
                             ]
                         })
@@ -1078,6 +1063,14 @@ class FengchaoSignin(_PluginBase):
                         }
                     ]
                 })
+            
+            # 页脚信息
+            footer_texts = [f'最后签到: {last_checkin_time}']
+            if user_info_updated_at:
+                footer_texts.append(f'数据更新: {user_info_updated_at}')
+            if pt_life_updated_at:
+                footer_texts.append(f'PT人生更新: {pt_life_updated_at}')
+            footer_line = ' • '.join(footer_texts)
 
             user_info_card = {
                 'component': 'VCard',
@@ -1112,14 +1105,6 @@ class FengchaoSignin(_PluginBase):
                                             {'component': 'VIcon', 'props': {'style': 'color: #2196F3;', 'size': 'x-small', 'class': 'mr-1'}, 'text': 'mdi-clock-outline'},
                                             {'component': 'span', 'text': f'最后访问 {last_seen_at}'}
                                         ]}]},
-                                        {'component': 'div', 'props': {'class': 'pa-1 elevation-2 mb-1', 'style': f'{frost_style} width: fit-content;'}, 'content': [{'component': 'div', 'props': {'class': 'd-flex align-center text-caption'}, 'content': [
-                                            {'component': 'VIcon', 'props': {'style': 'color: #FF9800;', 'size': 'x-small', 'class': 'mr-1'}, 'text': 'mdi-update'},
-                                            {'component': 'span', 'text': f'数据更新于 {user_info_updated_at}'}
-                                        ]}]} if user_info_updated_at else {},
-                                        {'component': 'div', 'props': {'class': 'pa-1 elevation-2 mb-1', 'style': f'{frost_style} width: fit-content;'}, 'content': [{'component': 'div', 'props': {'class': 'd-flex align-center text-caption'}, 'content': [
-                                            {'component': 'VIcon', 'props': {'style': 'color: #9C27B0;', 'size': 'x-small', 'class': 'mr-1'}, 'text': 'mdi-chart-box-outline'},
-                                            {'component': 'span', 'text': f'PT人生更新于 {pt_life_updated_at}'}
-                                        ]}]} if pt_life_updated_at else {},
                                         {'component': 'div', 'props': {'class': 'pa-1 elevation-2', 'style': f'{frost_style} width: fit-content;'}, 'content': [{'component': 'div', 'props': {'class': 'd-flex align-center text-caption'}, 'content': [
                                             {'component': 'VIcon', 'props': {'style': 'color: #E64A19;', 'size': 'x-small', 'class': 'mr-1'}, 'text': 'mdi-medal-outline'},
                                             {'component': 'span', 'text': f'拥有 {badge_count} 枚徽章'}
@@ -1175,7 +1160,7 @@ class FengchaoSignin(_PluginBase):
                             ]}
                         ]},
                         *badge_category_components,
-                        {'component': 'div', 'props': {'class': 'mt-2 text-caption text-right pa-1 elevation-2 d-inline-block float-right', 'style': frost_style}, 'text': f'最后签到: {last_checkin_time}'}
+                        {'component': 'div', 'props': {'class': 'mt-2 text-caption text-right pa-1 elevation-2 d-inline-block float-right', 'style': frost_style}, 'text': footer_line}
                     ]}
                 ]
             }
