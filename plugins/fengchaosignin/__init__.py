@@ -117,7 +117,7 @@ class FengchaoSignin(_PluginBase):
         if self._update_info_now:
             logger.info("蜂巢插件：安排立即更新个人信息任务")
             self._scheduler.add_job(func=self._run_once_update_info, trigger='date',
-                                    run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=3),
+                                    run_date=datetime.now(tz=pyytz.timezone(settings.TZ)) + timedelta(seconds=3),
                                     name="蜂巢个人信息更新（手动单次）")
             self._update_info_now = False
             self.update_config(self.get_config_dict())
