@@ -589,7 +589,6 @@ class FengchaoSignin(_PluginBase):
                 return
 
             csrf_token = (re.findall(r'"csrfToken":"(.*?)"', res.text) or [None])[0]
-            # 【V1.3.3 修复】: 增加安全检查，防止 re.search 返回 None 时程序崩溃
             user_match = re.search(r'"userId":(\d+)', res.text)
             user_id = user_match.group(1) if user_match else None
             
@@ -652,7 +651,7 @@ class FengchaoSignin(_PluginBase):
             raw_data_list = SiteOper().get_userdata()
             if not raw_data_list:
                 logger.error("通过SiteOper未获取到站点数据")
-                return None
+                return self._get_site_statistics_via_api()
             
             data_dict = {f"{d.updated_day}_{d.name}": d for d in raw_data_list}
             latest_site_data = []
@@ -745,7 +744,6 @@ class FengchaoSignin(_PluginBase):
                 return None
 
             set_cookie_header = login_res.headers.get('set-cookie', '')
-            # 【V1.3.3 修复】: 优化Cookie处理逻辑，更健壮
             new_session_match = re.search(r'flarum_session=([^;]+)', set_cookie_header)
             cookie_dict = {'flarum_session': new_session_match.group(1) if new_session_match else session_cookie}
             
