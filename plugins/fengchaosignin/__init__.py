@@ -24,7 +24,7 @@ class FengchaoSignin(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/madrays/MoviePilot-Plugins/main/icons/fengchao.png"
     # 插件版本
-    plugin_version = "1.3.4"
+    plugin_version = "1.3.5"  # Incremented version
     # 插件作者
     plugin_author = "madrays & Gemini"
     # 作者主页
@@ -45,7 +45,7 @@ class FengchaoSignin(_PluginBase):
     _update_info_now = False
     _notify = False
     _history_days = None
-    # 重试相关
+    # 签到重试相关
     _retry_count = 0  # 最大重试次数
     _current_retry = 0  # 当前重试次数
     _retry_interval = 2  # 重试间隔(小时)
@@ -58,13 +58,12 @@ class FengchaoSignin(_PluginBase):
     # 用户名密码
     _username = None
     _password = None
-
     # 定时更新个人信息相关
-    _update_info_cron_enabled = False
-    _update_info_cron = "0 */2 * * *"
-    _update_info_retry_count = 0
-    _update_info_retry_interval = 0
-    _update_info_current_retry = 0
+    _timed_update_enabled = False
+    _timed_update_cron = "0 */2 * * *"
+    _timed_update_retry_count = 0
+    _timed_update_retry_interval = 0
+    _timed_update_current_retry = 0
 
     # 定时器
     _scheduler: Optional[BackgroundScheduler] = None
@@ -89,17 +88,17 @@ class FengchaoSignin(_PluginBase):
             self._use_proxy = config.get("use_proxy", True)
             self._username = config.get("username", "")
             self._password = config.get("password", "")
-            # 加载定时更新配置
-            self._update_info_cron_enabled = config.get("update_info_cron_enabled", False)
-            self._update_info_cron = config.get("update_info_cron", "0 */2 * * *")
-            self._update_info_retry_count = int(config.get("update_info_retry_count", 0))
-            self._update_info_retry_interval = int(config.get("update_info_retry_interval", 0))
+            # 接收定时更新个人信息配置
+            self._timed_update_enabled = config.get("timed_update_enabled", False)
+            self._timed_update_cron = config.get("timed_update_cron", "0 */2 * * *")
+            self._timed_update_retry_count = int(config.get("timed_update_retry_count", 0))
+            self._timed_update_retry_interval = int(config.get("timed_update_retry_interval", 0))
             # 初始化最后推送时间
             self._last_push_time = self.get_data('last_push_time')
 
         # 重置重试计数
         self._current_retry = 0
-        self._update_info_current_retry = 0
+        self._timed_update_current_retry = 0
 
         # 停止现有任务
         self.stop_service()
@@ -136,11 +135,12 @@ class FengchaoSignin(_PluginBase):
                                     name="蜂巢签到")
 
         # 周期更新个人信息
-        if self._update_info_cron_enabled and self._enabled:
-            update_cron = self._update_info_cron.strip() or "0 */2 * * *"
-            logger.info(f"蜂巢个人信息定时更新服务启动，周期：{update_cron}")
+        if self._timed_update_enabled and self._enabled:
+            cron_to_use = self._timed_update_cron if self._timed_update_cron else "0 */2 * * *"
+            logger.info(f"蜂巢个人信息定时更新服务启动，周期：{cron_to_use}")
             self._scheduler.add_job(func=self.__update_user_info,
-                                    trigger=CronTrigger.from_crontab(update_cron),
+                                    kwargs={'is_scheduled_run': True},
+                                    trigger=CronTrigger.from_crontab(cron_to_use),
                                     name="蜂巢个人信息定时更新")
 
         # 启动任务
@@ -164,10 +164,10 @@ class FengchaoSignin(_PluginBase):
             "use_proxy": self._use_proxy,
             "username": self._username,
             "password": self._password,
-            "update_info_cron_enabled": self._update_info_cron_enabled,
-            "update_info_cron": self._update_info_cron,
-            "update_info_retry_count": self._update_info_retry_count,
-            "update_info_retry_interval": self._update_info_retry_interval,
+            "timed_update_enabled": self._timed_update_enabled,
+            "timed_update_cron": self._timed_update_cron,
+            "timed_update_retry_count": self._timed_update_retry_count,
+            "timed_update_retry_interval": self._timed_update_retry_interval
         }
 
     def _send_notification(self, title, text):
@@ -239,45 +239,53 @@ class FengchaoSignin(_PluginBase):
                 )
             )
 
-    def _schedule_update_info_retry(self):
+    def _schedule_info_update_retry(self):
         """
         安排用户信息更新的重试任务
         """
         if not self._scheduler:
             self._scheduler = BackgroundScheduler(timezone=settings.TZ)
-        
+
+        retry_interval_hours = self._timed_update_retry_interval
+        if retry_interval_hours <= 0:
+            logger.warning("信息更新重试间隔配置为0或负数，不安排重试")
+            return
+
+        next_run_time = datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(hours=retry_interval_hours)
+
+        self._scheduler.add_job(
+            func=self.__update_user_info,
+            kwargs={'is_scheduled_run': True},
+            trigger='date',
+            run_date=next_run_time,
+            name=f"蜂巢信息更新重试 ({self._timed_update_current_retry}/{self._timed_update_retry_count})"
+        )
+
+        logger.info(
+            f"蜂巢信息更新失败，将在{retry_interval_hours}小时后重试，当前重试次数: {self._timed_update_current_retry}/{self._timed_update_retry_count}")
+
         if not self._scheduler.running:
             self._scheduler.start()
 
-        next_run_time = datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(hours=self._update_info_retry_interval)
-        
-        self._scheduler.add_job(
-            func=self.__update_user_info,
-            trigger='date',
-            run_date=next_run_time,
-            name=f"蜂巢信息更新重试 ({self._update_info_current_retry}/{self._update_info_retry_count})"
-        )
-        logger.info(f"蜂巢信息更新失败，将在{self._update_info_retry_interval}小时后重试，当前重试次数: {self._update_info_current_retry}/{self._update_info_retry_count}")
-    
-    def _send_update_info_failure_notification(self, reason: str):
+    def _send_info_update_failure_notification(self, reason: str):
         """
-        发送用户信息更新失败的通知
+        发送信息更新失败的通知
         :param reason: 失败原因
         """
         if self._notify:
-            remaining_retries = self._update_info_retry_count - self._update_info_current_retry
+            remaining_retries = self._timed_update_retry_count - self._timed_update_current_retry
             retry_info = ""
-            if self._update_info_retry_count > 0 and remaining_retries > 0:
-                next_retry_hours = self._update_info_retry_interval
+            if self._timed_update_retry_count > 0 and remaining_retries > 0:
+                next_retry_hours = self._timed_update_retry_interval
                 retry_info = (
                     f"🔄 重试信息\n"
-                    f"• 将在 {next_retry_hours} 小时后进行下一次重试\n"
-                    f"• 剩余重试次数: {remaining_retries}\n"
+                    f"• 将在 {next_retry_hours} 小时后进行下一次定时重试\n"
+                    f"• 剩余定时重试次数: {remaining_retries}\n"
                     f"━━━━━━━━━━\n"
                 )
 
             self._send_notification(
-                title="【❌ 蜂巢信息更新失败】",
+                title="【❌ 蜂巢信息定时更新失败】",
                 text=(
                     f"📢 执行结果\n"
                     f"━━━━━━━━━━\n"
@@ -309,12 +317,12 @@ class FengchaoSignin(_PluginBase):
             logger.error(f"获取代理设置出错: {str(e)}")
             return None
 
-    def __update_user_info(self):
+    def __update_user_info(self, is_scheduled_run: bool = False):
         """
-        更新用户信息，不执行签到。支持重试。
+        仅更新用户信息，不执行签到
+        :param is_scheduled_run: 是否为定时任务调用，用于判断是否启用重试
         """
         logger.info("开始执行蜂巢用户信息更新任务...")
-        is_one_time_task = self._update_info_now
         try:
             if not self._username or not self._password:
                 raise Exception("未配置用户名和密码")
@@ -358,9 +366,8 @@ class FengchaoSignin(_PluginBase):
             self.save_data("user_info_updated_at", datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
             logger.info("成功更新并保存了蜂巢用户信息。")
 
-            if self._update_info_current_retry > 0:
-                logger.info("用户信息更新重试成功，重置计数器。")
-                self._update_info_current_retry = 0
+            if is_scheduled_run:
+                self._timed_update_current_retry = 0
 
             self._send_notification(
                 title="【✅ 蜂巢信息更新成功】",
@@ -370,17 +377,24 @@ class FengchaoSignin(_PluginBase):
 
         except Exception as e:
             logger.error(f"更新蜂巢用户信息失败: {e}")
-            self._send_update_info_failure_notification(str(e))
-
-            if self._update_info_cron_enabled and not is_one_time_task:
-                if self._update_info_retry_count > 0 and self._update_info_current_retry < self._update_info_retry_count:
-                    self._update_info_current_retry += 1
-                    self._schedule_update_info_retry()
-                elif self._update_info_retry_count > 0:
-                    logger.info("已达到信息更新最大重试次数，不再重试")
-                    self._update_info_current_retry = 0
+            if is_scheduled_run:
+                self._send_info_update_failure_notification(reason=str(e))
+                if self._timed_update_retry_count > 0 and self._timed_update_current_retry < self._timed_update_retry_count:
+                    self._timed_update_current_retry += 1
+                    self._schedule_info_update_retry()
+                else:
+                    if self._timed_update_retry_count > 0:
+                        logger.info("用户信息更新已达到最大定时重试次数，不再重试")
+                    self._timed_update_current_retry = 0
+            else:
+                self._send_notification(
+                    title="【❌ 蜂巢信息更新失败】",
+                    text=f"在尝试刷新您的蜂巢论坛个人信息时发生错误。\n"
+                         f"💬 原因：{e}\n"
+                         f"🕐 时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                )
         finally:
-            if is_one_time_task:
+            if not is_scheduled_run:
                 self._update_info_now = False
                 self.update_config(self.get_config_dict())
 
@@ -820,74 +834,6 @@ class FengchaoSignin(_PluginBase):
                                             }
                                         ]
                                     },
-                                    {'component': 'VDivider', 'props': {'class': 'my-3'}},
-                                    {
-                                        'component': 'VRow',
-                                        'content': [
-                                            {
-                                                'component': 'VCol',
-                                                'props': {'cols': 12},
-                                                'content': [
-                                                    {
-                                                        'component': 'VSwitch',
-                                                        'props': {
-                                                            'model': 'update_info_cron_enabled',
-                                                            'label': '定时更新个人信息',
-                                                            'hint': '不开启定时，个人信息会随签到一块更新'
-                                                        }
-                                                    }
-                                                ]
-                                            }
-                                        ]
-                                    },
-                                    {
-                                        'component': 'VRow',
-                                        'content': [
-                                            {
-                                                'component': 'VCol',
-                                                'props': {'cols': 12, 'md': 4},
-                                                'content': [
-                                                    {
-                                                        'component': 'VCronField',
-                                                        'props': {
-                                                            'model': 'update_info_cron', 'label': '更新周期',
-                                                            'placeholder': '0 */2 * * *',
-                                                            'hint': '当“定时更新”开启时生效，默认每2小时'
-                                                        }
-                                                    }
-                                                ]
-                                            },
-                                            {
-                                                'component': 'VCol',
-                                                'props': {'cols': 12, 'md': 4},
-                                                'content': [
-                                                    {
-                                                        'component': 'VTextField',
-                                                        'props': {
-                                                            'model': 'update_info_retry_count', 'label': '更新失败重试次数',
-                                                            'type': 'number', 'placeholder': '0',
-                                                            'hint': '当“定时更新”开启时生效，0为不重试'
-                                                        }
-                                                    }
-                                                ]
-                                            },
-                                            {
-                                                'component': 'VCol',
-                                                'props': {'cols': 12, 'md': 4},
-                                                'content': [
-                                                    {
-                                                        'component': 'VTextField',
-                                                        'props': {
-                                                            'model': 'update_info_retry_interval', 'label': '更新重试间隔(小时)',
-                                                            'type': 'number', 'placeholder': '0',
-                                                            'hint': '当“定时更新”开启时生效'
-                                                        }
-                                                    }
-                                                ]
-                                            }
-                                        ]
-                                    },
-                                    {'component': 'VDivider', 'props': {'class': 'my-3'}},
                                     {
                                         'component': 'VRow',
                                         'content': [
@@ -963,7 +909,7 @@ class FengchaoSignin(_PluginBase):
                                                     {
                                                         'component': 'VTextField',
                                                         'props': {
-                                                            'model': 'retry_count', 'label': '签到失败重试次数',
+                                                            'model': 'retry_count', 'label': '失败重试次数',
                                                             'type': 'number', 'placeholder': '0',
                                                             'hint': '0表示不重试，大于0则在签到失败后重试'
                                                         }
@@ -977,7 +923,7 @@ class FengchaoSignin(_PluginBase):
                                                     {
                                                         'component': 'VTextField',
                                                         'props': {
-                                                            'model': 'retry_interval', 'label': '签到重试间隔(小时)',
+                                                            'model': 'retry_interval', 'label': '重试间隔(小时)',
                                                             'type': 'number', 'placeholder': '2',
                                                             'hint': '签到失败后多少小时后重试'
                                                         }
@@ -998,6 +944,102 @@ class FengchaoSignin(_PluginBase):
                                                         'props': {
                                                             'model': 'use_proxy', 'label': '使用代理',
                                                             'hint': '与蜂巢论坛通信时使用系统代理'
+                                                        }
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    {'component': 'VDivider', 'props': {'class': 'my-3'}},
+                                    {
+                                        'component': 'VRow',
+                                        'content': [
+                                            {
+                                                'component': 'VCol',
+                                                'props': {'cols': 12},
+                                                'content': [
+                                                    {
+                                                        'component': 'div',
+                                                        'props': {'class': 'd-flex align-center mb-3'},
+                                                        'content': [
+                                                            {
+                                                                'component': 'VIcon',
+                                                                'props': {'style': 'color: #1976D2;',
+                                                                          'class': 'mr-2'},
+                                                                'text': 'mdi-account-clock'
+                                                            },
+                                                            {
+                                                                'component': 'span',
+                                                                'props': {'style': 'font-size: 1.1rem; font-weight: 500;'},
+                                                                'text': '定时更新个人信息'
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        'component': 'VRow',
+                                        'content': [
+                                            {
+                                                'component': 'VCol',
+                                                'props': {'cols': 12},
+                                                'content': [
+                                                    {
+                                                        'component': 'VSwitch',
+                                                        'props': {
+                                                            'model': 'timed_update_enabled',
+                                                            'label': '启用定时更新个人信息',
+                                                            'hint': '若不开启，个人信息会随每次签到一块更新'
+                                                        }
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        'component': 'VRow',
+                                        'content': [
+                                            {
+                                                'component': 'VCol',
+                                                'props': {'cols': 12, 'md': 4},
+                                                'content': [
+                                                    {
+                                                        'component': 'VCronField',
+                                                        'props': {
+                                                            'model': 'timed_update_cron',
+                                                            'label': '更新周期',
+                                                            'placeholder': '0 */2 * * *',
+                                                            'hint': '默认每2小时更新一次'
+                                                        }
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                'component': 'VCol',
+                                                'props': {'cols': 12, 'md': 4},
+                                                'content': [
+                                                    {
+                                                        'component': 'VTextField',
+                                                        'props': {
+                                                            'model': 'timed_update_retry_count',
+                                                            'label': '失败重试次数',
+                                                            'type': 'number', 'placeholder': '0'
+                                                        }
+                                                    }
+                                                ]
+                                            },
+                                            {
+                                                'component': 'VCol',
+                                                'props': {'cols': 12, 'md': 4},
+                                                'content': [
+                                                    {
+                                                        'component': 'VTextField',
+                                                        'props': {
+                                                            'model': 'timed_update_retry_interval',
+                                                            'label': '重试间隔(小时)',
+                                                            'type': 'number', 'placeholder': '0'
                                                         }
                                                     }
                                                 ]
@@ -1061,8 +1103,8 @@ class FengchaoSignin(_PluginBase):
             "enabled": False, "notify": True, "cron": "30 8 * * *", "onlyonce": False, "update_info_now": False,
             "cookie": "", "username": "", "password": "", "history_days": 30, "retry_count": 0, "retry_interval": 2,
             "mp_push_enabled": False, "mp_push_interval": 1, "use_proxy": True,
-            "update_info_cron_enabled": False, "update_info_cron": "0 */2 * * *", 
-            "update_info_retry_count": 0, "update_info_retry_interval": 0
+            "timed_update_enabled": False, "timed_update_cron": "0 */2 * * *",
+            "timed_update_retry_count": 0, "timed_update_retry_interval": 0
         }
 
     def _map_fa_to_mdi(self, icon_class: str) -> str:
