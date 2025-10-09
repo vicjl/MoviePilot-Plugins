@@ -1789,27 +1789,72 @@ class FengchaoSignin(_PluginBase):
                     if hasattr(self, '_cached_formatted_stats'): self._cached_formatted_stats = None
                     if hasattr(self, '_cached_stats_time'): delattr(self, '_cached_stats_time')
                     logger.info("已清除站点数据缓存，下次将获取最新数据")
-                    if self._notify: self._send_notification(title="【✅ 蜂巢论坛PT人生数据更新成功】",
-                                                               text=f"📢 执行结果\n━━━━━━━━━━\n🕐 时间：{now.strftime('%Y-%m-%d %H:%M:%S')}\n✨ 状态：成功更新蜂巢论坛PT人生数据\n📊 站点数：{len(formatted_stats.get('sites', []))} 个\n━━━━━━━━━━")
+                    if self._notify:
+                        self._send_notification(
+                            title="【✅ 蜂巢论坛PT人生数据更新成功】",
+                            text=(
+                                f"📢 执行结果\n"
+                                f"━━━━━━━━━━\n"
+                                f"🕐 时间：{now.strftime('%Y-%m-%d %H:%M:%S')}\n"
+                                f"✨ 状态：成功更新蜂巢论坛PT人生数据\n"
+                                f"📊 站点数：{len(formatted_stats.get('sites', []))} 个\n"
+                                f"━━━━━━━━━━"
+                            )
+                        )
                     return True
                 else:
-                    logger.error(
-                        f"更新蜂巢论坛PT人生数据失败：{res.status_code if res else '请求失败'}, 响应: {res.text[:100] if res and hasattr(res, 'text') else '无响应内容'}")
-                    if attempt < max_retries: continue
-                    if self._notify: self._send_notification(title="【❌ 蜂巢论坛PT人生数据更新失败】",
-                                                               text=f"📢 执行结果\n━━━━━━━━━━\n🕐 时间：{now.strftime('%Y-%m-%d %H:%M:%S')}\n❌ 状态：更新蜂巢论坛PT人生数据失败（已重试{attempt - retry_count}次）\n━━━━━━━━━━\n💡 可能的解决方法\n• 检查Cookie是否有效\n• 确认站点是否可访问\n• 尝试手动登录网站\n━━━━━━━━━━")
+                    logger.error(f"更新蜂巢论坛PT人生数据失败：{res.status_code if res else '请求失败'}, 响应: {res.text[:100] if res and hasattr(res, 'text') else '无响应内容'}")
+                    if attempt < max_retries:
+                        continue
+
+                    # 所有重试都失败，发送通知
+                    if self._notify:
+                        self._send_notification(
+                            title="【❌ 蜂巢论坛PT人生数据更新失败】",
+                            text=(
+                                f"📢 执行结果\n"
+                                f"━━━━━━━━━━\n"
+                                f"🕐 时间：{now.strftime('%Y-%m-%d %H:%M:%S')}\n"
+                                f"❌ 状态：更新蜂巢论坛PT人生数据失败（已重试{attempt - retry_count}次）\n"
+                                f"━━━━━━━━━━\n"
+                                f"💡 可能的解决方法\n"
+                                f"• 检查Cookie是否有效\n"
+                                f"• 确认站点是否可访问\n"
+                                f"• 尝试手动登录网站\n"
+                                f"━━━━━━━━━━"
+                            )
+                        )
                     return False
             except Exception as e:
                 logger.error(f"更新过程发生异常: {str(e)}")
                 import traceback
                 logger.error(f"错误详情: {traceback.format_exc()}")
-                if attempt < max_retries: continue
-                if self._notify: self._send_notification(title="【❌ 蜂巢论坛PT人生数据更新失败】",
-                                                           text=f"📢 执行结果\n━━━━━━━━━━\n🕐 时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n❌ 状态：更新蜂巢论坛PT人生数据失败（已重试{attempt - retry_count}次）\n━━━━━━━━━━\n💡 可能的解决方法\n• 检查系统网络连接\n• 确认站点是否可访问\n• 检查代码是否有错误\n━━━━━━━━━━")
+
+                if attempt < max_retries:
+                    continue
+
+                # 所有重试都失败
+                if self._notify:
+                    self._send_notification(
+                        title="【❌ 蜂巢论坛PT人生数据更新失败】",
+                        text=(
+                            f"📢 执行结果\n"
+                            f"━━━━━━━━━━\n"
+                            f"🕐 时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                            f"❌ 状态：更新蜂巢论坛PT人生数据失败（已重试{attempt - retry_count}次）\n"
+                            f"━━━━━━━━━━\n"
+                            f"💡 可能的解决方法\n"
+                            f"• 检查系统网络连接\n"
+                            f"• 确认站点是否可访问\n"
+                            f"• 检查代码是否有错误\n"
+                            f"━━━━━━━━━━"
+                        )
+                    )
 
     def _get_site_statistics(self):
-        """获取站点统计数据"""
+        """获取站点统计数据（参考站点统计插件实现）"""
         try:
+            # 导入SiteOper类和SitesHelper
             from app.db.site_oper import SiteOper
             from app.helper.sites import SitesHelper
             site_oper, sites_helper = SiteOper(), SitesHelper()
