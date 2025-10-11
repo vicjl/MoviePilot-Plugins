@@ -68,6 +68,13 @@ class FengchaoSignin(_PluginBase):
     # 定时器
     _scheduler: Optional[BackgroundScheduler] = None
 
+    # -- 修改 --
+    # 存储当前生效的配置，用于检测变更
+    _active_enabled = None
+    _active_cron = None
+    _active_timed_update_enabled = None
+    _active_timed_update_cron = None
+
     def init_plugin(self, config: dict = None):
         """
         插件初始化
@@ -88,65 +95,93 @@ class FengchaoSignin(_PluginBase):
             self._use_proxy = config.get("use_proxy", True)
             self._username = config.get("username", "")
             self._password = config.get("password", "")
-            # 接收定时更新个人信息配置
             self._timed_update_enabled = config.get("timed_update_enabled", False)
             self._timed_update_cron = config.get("timed_update_cron", "0 */2 * * *")
             self._timed_update_retry_count = int(config.get("timed_update_retry_count", 0))
             self._timed_update_retry_interval = int(config.get("timed_update_retry_interval", 0))
-            # 初始化最后推送时间
             self._last_push_time = self.get_data('last_push_time')
 
-        # 重置重试计数
+        # 重置即时任务的重试计数
         self._current_retry = 0
         self._timed_update_current_retry = 0
 
-        # 停止现有任务
-        self.stop_service()
+        # -- 全新修改核心逻辑 --
 
-        # 确保scheduler是新的
-        self._scheduler = BackgroundScheduler(timezone=settings.TZ)
+        # 1. 确保调度器实例存在且正在运行
+        if not self._scheduler or not self._scheduler.running:
+            self.stop_service()
+            self._scheduler = BackgroundScheduler(timezone=settings.TZ)
+            logger.info("调度器未运行，已创建新的实例。")
+            # 强制首次加载时任务被更新
+            self._active_enabled = not self._enabled
 
-        # 立即更新个人信息
+        # 2. 独立管理签到任务
+        signin_job_id = "fengchao_signin_cron"
+        signin_config_changed = (self._enabled != self._active_enabled or self._cron != self._active_cron)
+        if signin_config_changed:
+            logger.info("检测到签到任务配置变更，正在更新...")
+            if self._scheduler.get_job(signin_job_id):
+                self._scheduler.remove_job(signin_job_id)
+                logger.info("已移除旧的签到周期任务。")
+            if self._enabled and self._cron:
+                self._scheduler.add_job(
+                    func=self.__signin,
+                    trigger=CronTrigger.from_crontab(self._cron),
+                    name="蜂巢签到",
+                    id=signin_job_id
+                )
+                logger.info(f"已添加新的签到周期任务，周期：{self._cron}")
+
+        # 3. 独立管理个人信息更新任务
+        info_update_job_id = "fengchao_info_update_cron"
+        info_update_config_changed = (
+                self._enabled != self._active_enabled or
+                self._timed_update_enabled != self._active_timed_update_enabled or
+                self._timed_update_cron != self._active_timed_update_cron
+        )
+        if info_update_config_changed:
+            logger.info("检测到个人信息更新任务配置变更，正在更新...")
+            if self._scheduler.get_job(info_update_job_id):
+                self._scheduler.remove_job(info_update_job_id)
+                logger.info("已移除旧的个人信息更新周期任务。")
+            if self._enabled and self._timed_update_enabled:
+                cron_to_use = self._timed_update_cron if self._timed_update_cron else "0 */2 * * *"
+                self._scheduler.add_job(
+                    func=self.__update_user_info,
+                    kwargs={'is_scheduled_run': True},
+                    trigger=CronTrigger.from_crontab(cron_to_use),
+                    name="蜂巢个人信息定时更新",
+                    id=info_update_job_id
+                )
+                logger.info(f"已添加新的个人信息更新周期任务，周期：{cron_to_use}")
+
+        # 4. 处理一次性任务
         if self._update_info_now:
             logger.info("蜂巢插件：立即更新个人信息")
             self._scheduler.add_job(func=self.__update_user_info, trigger='date',
                                     run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=3),
                                     name="蜂巢个人信息更新")
-            # 自动关闭开关
             self._update_info_now = False
             self.update_config(self.get_config_dict())
 
-        # 立即运行一次（签到和信息更新）
         if self._onlyonce:
             logger.info(f"蜂巢插件启动，立即运行一次（签到和信息更新）")
-            # 安排签到任务，该任务成功后会自行更新用户信息
             self._scheduler.add_job(func=self.__signin, trigger='date',
                                     run_date=datetime.now(tz=pytz.timezone(settings.TZ)) + timedelta(seconds=3),
                                     name="蜂巢签到与信息更新（单次）")
-            # 关闭一次性开关
             self._onlyonce = False
             self.update_config(self.get_config_dict())
 
-        # 周期签到
-        if self._cron and self._enabled:
-            logger.info(f"蜂巢签到服务启动，周期：{self._cron}")
-            self._scheduler.add_job(func=self.__signin,
-                                    trigger=CronTrigger.from_crontab(self._cron),
-                                    name="蜂巢签到")
-
-        # 周期更新个人信息
-        if self._timed_update_enabled and self._enabled:
-            cron_to_use = self._timed_update_cron if self._timed_update_cron else "0 */2 * * *"
-            logger.info(f"蜂巢个人信息定时更新服务启动，周期：{cron_to_use}")
-            self._scheduler.add_job(func=self.__update_user_info,
-                                    kwargs={'is_scheduled_run': True},
-                                    trigger=CronTrigger.from_crontab(cron_to_use),
-                                    name="蜂巢个人信息定时更新")
-
-        # 启动任务
-        if self._scheduler.get_jobs():
+        # 5. 确保调度器在有任务时运行
+        if self._scheduler and not self._scheduler.running and self._scheduler.get_jobs():
             self._scheduler.print_jobs()
             self._scheduler.start()
+
+        # 6. 存储当前配置为“生效配置”，用于下次比较
+        self._active_enabled = self._enabled
+        self._active_cron = self._cron
+        self._active_timed_update_enabled = self._timed_update_enabled
+        self._active_timed_update_cron = self._timed_update_cron
 
     def get_config_dict(self):
         """获取当前配置字典，用于更新"""
@@ -593,13 +628,13 @@ class FengchaoSignin(_PluginBase):
 
                 if is_successful_checkin:
                     status_text = "签到成功"
-                    reward_text = f"获得{self._format_pollen(lastCheckinMoney)}花粉奖励" if lastCheckinMoney > 0 else "获得奖励"
+                    reward_text = f"获得{lastCheckinMoney}花粉奖励" if lastCheckinMoney > 0 else "获得奖励"
                     logger.info(
-                        f"蜂巢签到成功，获得{self._format_pollen(lastCheckinMoney)}花粉，当前花粉: {self._format_pollen(money)}，累计签到: {totalContinuousCheckIn}")
+                        f"蜂巢签到成功，获得{lastCheckinMoney}花粉，当前花粉: {money}，累计签到: {totalContinuousCheckIn}")
                 else:
                     status_text = "已签到"
                     reward_text = "今日已领取奖励"
-                    logger.info(f"蜂巢已签到，当前花粉: {self._format_pollen(money)}，累计签到: {totalContinuousCheckIn}")
+                    logger.info(f"蜂巢已签到，当前花粉: {money}，累计签到: {totalContinuousCheckIn}")
 
                 # 发送通知
                 if self._notify:
@@ -613,7 +648,7 @@ class FengchaoSignin(_PluginBase):
                             f"🎁 奖励：{reward_text}\n"
                             f"━━━━━━━━━━\n"
                             f"📊 积分统计\n"
-                            f"🌸 花粉：{self._format_pollen(money)}\n"
+                            f"🌸 花粉：{money}\n"
                             f"📆 签到天数：{totalContinuousCheckIn}\n"
                             f"━━━━━━━━━━"
                         )
