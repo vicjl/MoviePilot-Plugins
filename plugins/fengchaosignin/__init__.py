@@ -593,13 +593,13 @@ class FengchaoSignin(_PluginBase):
 
                 if is_successful_checkin:
                     status_text = "签到成功"
-                    reward_text = f"获得{lastCheckinMoney}花粉奖励" if lastCheckinMoney > 0 else "获得奖励"
+                    reward_text = f"获得{self._format_pollen(lastCheckinMoney)}花粉奖励" if lastCheckinMoney > 0 else "获得奖励"
                     logger.info(
-                        f"蜂巢签到成功，获得{lastCheckinMoney}花粉，当前花粉: {money}，累计签到: {totalContinuousCheckIn}")
+                        f"蜂巢签到成功，获得{self._format_pollen(lastCheckinMoney)}花粉，当前花粉: {self._format_pollen(money)}，累计签到: {totalContinuousCheckIn}")
                 else:
                     status_text = "已签到"
                     reward_text = "今日已领取奖励"
-                    logger.info(f"蜂巢已签到，当前花粉: {money}，累计签到: {totalContinuousCheckIn}")
+                    logger.info(f"蜂巢已签到，当前花粉: {self._format_pollen(money)}，累计签到: {totalContinuousCheckIn}")
 
                 # 发送通知
                 if self._notify:
@@ -613,7 +613,7 @@ class FengchaoSignin(_PluginBase):
                             f"🎁 奖励：{reward_text}\n"
                             f"━━━━━━━━━━\n"
                             f"📊 积分统计\n"
-                            f"🌸 花粉：{money}\n"
+                            f"🌸 花粉：{self._format_pollen(money)}\n"
                             f"📆 签到天数：{totalContinuousCheckIn}\n"
                             f"━━━━━━━━━━"
                         )
