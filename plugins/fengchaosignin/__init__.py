@@ -637,7 +637,7 @@ class FengchaoSignin(_PluginBase):
                             f"🎁 奖励：{reward_text}\n"
                             f"━━━━━━━━━━\n"
                             f"📊 积分统计\n"
-                            f"🌸 花粉：{money}\n"
+                            f"🌸 花粉：{formatted_money}\n"
                             f"📆 签到天数：{totalContinuousCheckIn}\n"
                             f"━━━━━━━━━━"
                         )
