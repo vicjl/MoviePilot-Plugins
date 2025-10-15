@@ -68,7 +68,6 @@ class FengchaoSignin(_PluginBase):
     # 定时器
     _scheduler: Optional[BackgroundScheduler] = None
 
-    # -- 修改 --
     # 存储当前生效的配置，用于检测变更
     _active_enabled = None
     _active_cron = None
@@ -105,9 +104,6 @@ class FengchaoSignin(_PluginBase):
         self._current_retry = 0
         self._timed_update_current_retry = 0
 
-        # -- 全新修改核心逻辑 --
-
-        # 1. 确保调度器实例存在且正在运行
         if not self._scheduler or not self._scheduler.running:
             self.stop_service()
             self._scheduler = BackgroundScheduler(timezone=settings.TZ)
@@ -115,7 +111,6 @@ class FengchaoSignin(_PluginBase):
             # 强制首次加载时任务被更新
             self._active_enabled = not self._enabled
 
-        # 2. 独立管理签到任务
         signin_job_id = "fengchao_signin_cron"
         signin_config_changed = (self._enabled != self._active_enabled or self._cron != self._active_cron)
         if signin_config_changed:
@@ -132,7 +127,6 @@ class FengchaoSignin(_PluginBase):
                 )
                 logger.info(f"已添加新的签到周期任务，周期：{self._cron}")
 
-        # 3. 独立管理个人信息更新任务
         info_update_job_id = "fengchao_info_update_cron"
         info_update_config_changed = (
                 self._enabled != self._active_enabled or
@@ -155,7 +149,6 @@ class FengchaoSignin(_PluginBase):
                 )
                 logger.info(f"已添加新的个人信息更新周期任务，周期：{cron_to_use}")
 
-        # 4. 处理一次性任务
         if self._update_info_now:
             logger.info("蜂巢插件：立即更新个人信息")
             self._scheduler.add_job(func=self.__update_user_info, trigger='date',
@@ -172,12 +165,10 @@ class FengchaoSignin(_PluginBase):
             self._onlyonce = False
             self.update_config(self.get_config_dict())
 
-        # 5. 确保调度器在有任务时运行
         if self._scheduler and not self._scheduler.running and self._scheduler.get_jobs():
             self._scheduler.print_jobs()
             self._scheduler.start()
 
-        # 6. 存储当前配置为“生效配置”，用于下次比较
         self._active_enabled = self._enabled
         self._active_cron = self._cron
         self._active_timed_update_enabled = self._timed_update_enabled
@@ -511,7 +502,6 @@ class FengchaoSignin(_PluginBase):
                         continue
                     raise Exception("无法连接到站点")
 
-                # 改进：签到前获取当前花粉和天数，用于事后比较，避免API标志位误导
                 pre_money = None
                 pre_days = None
                 try:
@@ -620,7 +610,6 @@ class FengchaoSignin(_PluginBase):
                     if money > pre_money or totalContinuousCheckIn > pre_days:
                         is_successful_checkin = True
                 else:
-                    # 如果签到前数据获取失败，则回退到旧的判断逻辑
                     can_checkin_before = '"canCheckin":true' in res.text
                     logger.info(f"回退到API标志位判断: canCheckin -> {can_checkin_before}")
                     if can_checkin_before:
