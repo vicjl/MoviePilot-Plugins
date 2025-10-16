@@ -605,6 +605,9 @@ class FengchaoSignin(_PluginBase):
                 totalContinuousCheckIn = sign_dict['data']['attributes']['totalContinuousCheckIn']
                 lastCheckinMoney = sign_dict['data']['attributes'].get('lastCheckinMoney', 0)
 
+                formatted_money = self._format_pollen(money)
+                formatted_last_checkin_money = self._format_pollen(lastCheckinMoney)
+
                 is_successful_checkin = False
                 if pre_money is not None and pre_days is not None:
                     if money > pre_money or totalContinuousCheckIn > pre_days:
@@ -617,13 +620,13 @@ class FengchaoSignin(_PluginBase):
 
                 if is_successful_checkin:
                     status_text = "签到成功"
-                    reward_text = f"获得{lastCheckinMoney}花粉奖励" if lastCheckinMoney > 0 else "获得奖励"
+                    reward_text = f"获得{formatted_last_checkin_money}花粉奖励" if lastCheckinMoney > 0 else "获得奖励"
                     logger.info(
-                        f"蜂巢签到成功，获得{lastCheckinMoney}花粉，当前花粉: {money}，累计签到: {totalContinuousCheckIn}")
+                        f"蜂巢签到成功，获得{formatted_last_checkin_money}花粉，当前花粉: {formatted_money}，累计签到: {totalContinuousCheckIn}")
                 else:
                     status_text = "已签到"
                     reward_text = "今日已领取奖励"
-                    logger.info(f"蜂巢已签到，当前花粉: {money}，累计签到: {totalContinuousCheckIn}")
+                    logger.info(f"蜂巢已签到，当前花粉: {formatted_money}，累计签到: {totalContinuousCheckIn}")
 
                 # 发送通知
                 if self._notify:
